@@ -13,6 +13,7 @@ import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -39,5 +40,12 @@ public class Menu extends AuditingEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private MenuStatus status;
+
+    @Builder
+    private Menu(String name, Long price, MenuStatus status) {
+        this.name = name;
+        this.price = price;
+        this.status = status;
+    }
 
 }
