@@ -3,18 +3,18 @@
 -- ddl-auto=update 이므로 재기동해도 테이블/데이터가 유지될 수 있어, 재실행해도 중복 삽입되지 않도록
 -- WHERE NOT EXISTS 가드를 둠.
 
--- 1) users
-INSERT INTO users (name, created_at, updated_at)
-SELECT '홍길동', NOW(), NOW() FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE name = '홍길동');
+-- 1) users (email 은 UNIQUE, password 는 현재 평문 저장 정책이라 시드도 평문)
+INSERT INTO users (name, email, password, created_at, updated_at)
+SELECT '홍길동', 'hong@example.com', 'password1234', NOW(), NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'hong@example.com');
 
-INSERT INTO users (name, created_at, updated_at)
-SELECT '김철수', NOW(), NOW() FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE name = '김철수');
+INSERT INTO users (name, email, password, created_at, updated_at)
+SELECT '김철수', 'kim@example.com', 'password1234', NOW(), NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'kim@example.com');
 
-INSERT INTO users (name, created_at, updated_at)
-SELECT '이영희', NOW(), NOW() FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE name = '이영희');
+INSERT INTO users (name, email, password, created_at, updated_at)
+SELECT '이영희', 'lee@example.com', 'password1234', NOW(), NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'lee@example.com');
 
 -- 2) menu
 INSERT INTO menu (name, price, status, created_at, updated_at)
