@@ -21,6 +21,7 @@ public enum ErrorCode {
     // Point
     INSUFFICIENT_POINT(HttpStatus.CONFLICT, "POINT_001", "포인트가 부족합니다."),
     INVALID_POINT_AMOUNT(HttpStatus.BAD_REQUEST, "POINT_002", "포인트 사용 금액이 올바르지 않습니다."),
+    DUPLICATE_POINT_CHARGE_REQUEST(HttpStatus.CONFLICT, "POINT_003", "이미 처리된 충전 요청입니다."),
 
     // Product
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_001", "상품을 찾을 수 없습니다."),
