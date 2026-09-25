@@ -14,7 +14,9 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -28,6 +30,7 @@ import java.util.Map;
         columnNames = {
                 "order_id",
                 "event_type"})})
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderEvent extends AuditingEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

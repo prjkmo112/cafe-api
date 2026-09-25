@@ -5,6 +5,8 @@ import io.github.prjkmo112.cafeapi.domain.order.entity.Order;
 import io.github.prjkmo112.cafeapi.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,7 +19,10 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
@@ -29,6 +34,7 @@ import lombok.Getter;
                         "idempotency_key"}),
         @UniqueConstraint(name = "uk_point_history_order",
                 columnNames = {"order_id"})})
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PointHistory extends AuditingEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,10 +46,9 @@ public class PointHistory extends AuditingEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Size(max = 10)
-    @NotNull
+    @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 10)
-    private String type;
+    private PointHistoryType type;
 
     @NotNull
     @Column(name = "amount", nullable = false)
@@ -61,9 +66,13 @@ public class PointHistory extends AuditingEntity {
     @Column(name = "idempotency_key", length = 64)
     private String idempotencyKey;
 
-    @Size(max = 64)
-    @Column(name = "request_hash", length = 64)
-    private String requestHash;
-
+    @Builder
+    private PointHistory(User user, PointHistoryType type, Long amount, Long balanceAfter, String idempotencyKey) {
+        this.user = user;
+        this.type = type;
+        this.amount = amount;
+        this.balanceAfter = balanceAfter;
+        this.idempotencyKey = idempotencyKey;
+    }
 
 }

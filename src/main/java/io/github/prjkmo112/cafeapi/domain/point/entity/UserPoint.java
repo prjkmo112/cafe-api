@@ -1,6 +1,8 @@
 package io.github.prjkmo112.cafeapi.domain.point.entity;
 
 import io.github.prjkmo112.cafeapi.common.entity.AuditingEntity;
+import io.github.prjkmo112.cafeapi.common.exception.BusinessException;
+import io.github.prjkmo112.cafeapi.common.exception.ErrorCode;
 import io.github.prjkmo112.cafeapi.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,11 +15,15 @@ import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
+import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
 @Table(name = "user_point")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserPoint extends AuditingEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,5 +39,17 @@ public class UserPoint extends AuditingEntity {
     @Column(name = "balance", nullable = false)
     private Long balance;
 
+    @Builder
+    private UserPoint(User user) {
+        this.user = user;
+        this.balance = 0L;
+    }
+
+    public void charge(Long amount) {
+        if (amount == null || amount <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_POINT_AMOUNT);
+        }
+        this.balance += amount;
+    }
 
 }

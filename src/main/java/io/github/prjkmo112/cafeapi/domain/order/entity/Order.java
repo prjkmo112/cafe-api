@@ -16,7 +16,9 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
@@ -25,6 +27,7 @@ import lombok.Getter;
         columnNames = {
                 "user_id",
                 "idempotency_key"})})
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends AuditingEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -12,12 +12,15 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
 @Table(name = "menu", uniqueConstraints = {@UniqueConstraint(name = "uk_menu_name",
         columnNames = {"name"})})
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Menu extends AuditingEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
