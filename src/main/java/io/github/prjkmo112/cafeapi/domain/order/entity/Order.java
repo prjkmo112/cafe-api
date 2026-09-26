@@ -17,7 +17,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
@@ -33,9 +32,7 @@ import java.util.UUID;
 @Getter
 @Entity
 @Table(name = "orders", indexes = {@Index(name = "idx_orders_status_created_menu",
-        columnList = "status, created_at, menu_id")}, uniqueConstraints = {@UniqueConstraint(name = "uk_orders_user_idempotency",
-        columnNames = {
-                "user_id"})})
+        columnList = "status, created_at, menu_id")})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends AuditingEntity {
     @Id
