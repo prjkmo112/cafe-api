@@ -1,10 +1,14 @@
 package io.github.prjkmo112.cafeapi.domain.order.entity;
 
 import io.github.prjkmo112.cafeapi.common.entity.AuditingEntity;
+import io.github.prjkmo112.cafeapi.common.exception.BusinessException;
+import io.github.prjkmo112.cafeapi.common.exception.ErrorCode;
 import io.github.prjkmo112.cafeapi.domain.user.entity.User;
 import io.github.prjkmo112.cafeapi.domain.menu.entity.Menu;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,16 +21,21 @@ import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 @Getter
 @Entity
 @Table(name = "orders", indexes = {@Index(name = "idx_orders_status_created_menu",
         columnList = "status, created_at, menu_id")}, uniqueConstraints = {@UniqueConstraint(name = "uk_orders_user_idempotency",
         columnNames = {
-                "user_id",
-                "idempotency_key"})})
+                "user_id"})})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends AuditingEntity {
     @Id
@@ -45,23 +54,41 @@ public class Order extends AuditingEntity {
     private Menu menu;
 
     @NotNull
-    @Column(name = "paid_amount", nullable = false)
-    private Long paidAmount;
+    @Column(name = "amount", nullable = false)
+    private Long amount;
 
-    @Size(max = 20)
-    @NotNull
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private String status;
+    private OrderStatus status;
 
     @Size(max = 64)
     @NotNull
-    @Column(name = "idempotency_key", nullable = false, length = 64)
-    private String idempotencyKey;
+    @Column(name = "order_id", nullable = false, length = 64)
+    private String orderId;
 
-    @Size(max = 64)
-    @NotNull
-    @Column(name = "request_hash", nullable = false, length = 64)
-    private String requestHash;
+    @Builder
+    private Order(User user, Menu menu, Long amount) {
+        this.user = user;
+        this.menu = menu;
+        this.amount = amount;
+        this.status = OrderStatus.PAID;
+        this.orderId = generateOrderNumber();
+    }
 
+    private String generateOrderNumber() {
+        String timestamp = LocalDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String randomUUID = UUID.randomUUID().toString()
+                .replace("-", "")
+                .substring(0, 8)
+                .toUpperCase();
+        return "ORD-" + timestamp + "-" + randomUUID;
+    }
+
+    public void transitTo(OrderStatus target) {
+        if (!this.status.canTransitTo(target)) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = target;
+    }
 
 }

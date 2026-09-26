@@ -10,8 +10,8 @@ import io.github.prjkmo112.cafeapi.domain.point.entity.UserPoint;
 import io.github.prjkmo112.cafeapi.domain.point.repository.PointHistoryRepository;
 import io.github.prjkmo112.cafeapi.domain.point.repository.UserPointRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -36,19 +36,34 @@ public class PointService {
 
         userPoint.charge(dto.point());
 
-        try {
-            PointHistory newHistory = PointHistory.builder()
-                    .user(userPoint.getUser())
-                    .type(PointHistoryType.CHARGE)
-                    .amount(dto.point())
-                    .balanceAfter(userPoint.getBalance())
-                    .idempotencyKey(dto.idempotencyKey())
-                    .build();
+        PointHistory newHistory = PointHistory.builder()
+                .user(userPoint.getUser())
+                .type(PointHistoryType.CHARGE)
+                .amount(dto.point())
+                .balanceAfter(userPoint.getBalance())
+                .idempotencyKey(dto.idempotencyKey())
+                .build();
 
-            pointHistoryRepository.save(newHistory);
-        } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.DUPLICATE_POINT_CHARGE_REQUEST);
-        }
+        pointHistoryRepository.save(newHistory);
+
+        return PointDto.from(userPoint);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public PointDto use(Long userId, Long amount) {
+        UserPoint userPoint = userPointRepository.findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        userPoint.use(amount);
+
+        PointHistory newHistory = PointHistory.builder()
+                .user(userPoint.getUser())
+                .type(PointHistoryType.USE)
+                .amount(amount)
+                .balanceAfter(userPoint.getBalance())
+                .build();
+
+        pointHistoryRepository.save(newHistory);
 
         return PointDto.from(userPoint);
     }

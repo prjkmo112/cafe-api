@@ -52,4 +52,14 @@ public class UserPoint extends AuditingEntity {
         this.balance += amount;
     }
 
+    public void use(Long amount) {
+        if (amount == null || amount <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_POINT_AMOUNT);
+        }
+        if (this.balance < amount) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
+        }
+        this.balance -= amount;
+    }
+
 }
