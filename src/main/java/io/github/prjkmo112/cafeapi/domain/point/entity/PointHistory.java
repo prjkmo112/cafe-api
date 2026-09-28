@@ -1,7 +1,6 @@
 package io.github.prjkmo112.cafeapi.domain.point.entity;
 
 import io.github.prjkmo112.cafeapi.common.entity.AuditingEntity;
-import io.github.prjkmo112.cafeapi.domain.order.entity.Order;
 import io.github.prjkmo112.cafeapi.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,7 +13,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
@@ -31,9 +29,8 @@ import lombok.NoArgsConstructor;
         @UniqueConstraint(name = "uk_point_history_user_idempotency",
                 columnNames = {
                         "user_id",
-                        "idempotency_key"}),
-        @UniqueConstraint(name = "uk_point_history_order",
-                columnNames = {"order_id"})})
+                        "idempotency_key"})
+})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PointHistory extends AuditingEntity {
     @Id
@@ -57,10 +54,6 @@ public class PointHistory extends AuditingEntity {
     @NotNull
     @Column(name = "balance_after", nullable = false)
     private Long balanceAfter;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
-    private Order order;
 
     @Size(max = 64)
     @Column(name = "idempotency_key", length = 64)
