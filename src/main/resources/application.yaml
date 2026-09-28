@@ -4,6 +4,8 @@ spring:
 
   cache:
     type: redis
+    redis:
+      time-to-live: 60s
 
   data:
     redis:
