@@ -5,10 +5,10 @@ import io.github.prjkmo112.cafeapi.domain.menu.entity.Menu;
 import io.github.prjkmo112.cafeapi.domain.order.dto.CreateOrderRequestDto;
 import io.github.prjkmo112.cafeapi.domain.order.dto.OrderDto;
 import io.github.prjkmo112.cafeapi.domain.order.entity.Order;
-import io.github.prjkmo112.cafeapi.domain.order.producer.OrderProducer;
 import io.github.prjkmo112.cafeapi.domain.order.repository.OrderRepository;
 import io.github.prjkmo112.cafeapi.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +20,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
-    private final OrderProducer orderProducer;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public OrderDto createOrder(CreateOrderRequestDto createOrderRequestDto, Menu menu) {
@@ -31,13 +31,10 @@ public class OrderService {
                 .build();
         orderRepository.save(order);
 
-        OrderPaidEvent orderPaidEvent = OrderPaidEvent.builder()
-                .userId(order.getUser().getId())
-                .menuId(order.getMenu().getId())
-                .paidAmount(order.getAmount())
-                .orderId(order.getOrderId())
-                .build();
-        orderProducer.send(orderPaidEvent);
+        // kafka event 전송
+        // ApplicationEventPublisher 에 의해 이벤트 그냥 뿌리고 넘어감
+        // 그럼 매칭되는 @TransactionalEventListener 가 있는 OrderProducer.send() 가 호출됨
+        eventPublisher.publishEvent(OrderPaidEvent.from(order));
 
         return OrderDto.from(order);
     }
