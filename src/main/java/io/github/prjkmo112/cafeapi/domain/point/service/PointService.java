@@ -10,6 +10,7 @@ import io.github.prjkmo112.cafeapi.domain.point.entity.UserPoint;
 import io.github.prjkmo112.cafeapi.domain.point.repository.PointHistoryRepository;
 import io.github.prjkmo112.cafeapi.domain.point.repository.UserPointRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +45,11 @@ public class PointService {
                 .idempotencyKey(dto.idempotencyKey())
                 .build();
 
-        pointHistoryRepository.save(newHistory);
+        try {
+            pointHistoryRepository.save(newHistory);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.DUPLICATE_POINT_CHARGE_REQUEST);
+        }
 
         return PointDto.from(userPoint);
     }
