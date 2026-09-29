@@ -2,6 +2,7 @@ package io.github.prjkmo112.cafeapi.common.exception;
 
 import io.github.prjkmo112.cafeapi.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -19,6 +20,13 @@ public class GlobalExceptionHandler {
         ErrorCode code = e.getErrorCode();
         return ResponseEntity.status(code.getStatus())
                 .body(ApiResponse.error(code, e.getMessage()));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLockTimeout(PessimisticLockingFailureException e) {
+        log.warn("락 획득 실패", e);
+        return ResponseEntity.status(ErrorCode.LOCK_TIMEOUT.getStatus())
+                .body(ApiResponse.error(ErrorCode.LOCK_TIMEOUT));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

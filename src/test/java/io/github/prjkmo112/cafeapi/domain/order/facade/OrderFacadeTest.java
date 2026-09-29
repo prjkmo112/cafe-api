@@ -18,6 +18,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -26,7 +28,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrderFacadeTest {
 
-    private static final CreateOrderRequestDto REQUEST = new CreateOrderRequestDto(1L, 10L);
+    private static final CreateOrderRequestDto REQUEST = new CreateOrderRequestDto(1L, 10L, "key-1");
 
     @Mock
     private OrderService orderService;
@@ -71,7 +73,8 @@ class OrderFacadeTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INSUFFICIENT_STOCK);
 
-        verifyNoInteractions(pointService, orderService);
+        verifyNoInteractions(pointService);
+        verify(orderService, never()).createOrder(any(), any());
     }
 
     @Test
@@ -84,7 +87,8 @@ class OrderFacadeTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
 
-        verifyNoInteractions(pointService, orderService);
+        verifyNoInteractions(pointService);
+        verify(orderService, never()).createOrder(any(), any());
     }
 
     @Test
@@ -98,6 +102,19 @@ class OrderFacadeTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
 
+        verify(orderService, never()).createOrder(any(), any());
+    }
+
+    @Test
+    @DisplayName("이미 처리된 멱등키면 기존 주문을 반환하고 메뉴 조회/포인트 차감/주문 생성을 하지 않는다")
+    void createOrder_idempotentReplay() {
+        OrderDto existing = new OrderDto(1L, 10L, "ORD-1", 4000L, OrderStatus.PAID);
+        given(orderService.findByIdempotencyKey(1L, "key-1")).willReturn(Optional.of(existing));
+
+        OrderDto result = orderFacade.createOrder(REQUEST);
+
+        assertThat(result).isSameAs(existing);
+        verifyNoInteractions(menuService, pointService);
         verify(orderService, never()).createOrder(any(), any());
     }
 

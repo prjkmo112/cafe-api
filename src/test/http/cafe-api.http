@@ -231,7 +231,8 @@ Content-Type: application/json
 
 {
   "userId": 1,
-  "menuId": 1
+  "menuId": 1,
+  "idempotencyKey": "order-{{runId}}"
 }
 
 > {%
@@ -240,6 +241,24 @@ Content-Type: application/json
     client.assert(response.body.data.status === "PAID");
     client.assert(response.body.data.amount === 4000);
     client.assert(response.body.data.orderId.startsWith("ORD-"));
+    client.global.set("orderId1", response.body.data.orderId);
+  });
+%}
+
+### 4-1-1. [성공] 4-1 과 같은 멱등키 재요청 -> 200, 기존 주문 반환(orderId 동일), 포인트 추가 차감 없음
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "menuId": 1,
+  "idempotencyKey": "order-{{runId}}"
+}
+
+> {%
+  client.test("멱등 재요청", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.orderId === client.global.get("orderId1"));
   });
 %}
 
@@ -249,7 +268,8 @@ Content-Type: application/json
 
 {
   "userId": 1,
-  "menuId": 5
+  "menuId": 5,
+  "idempotencyKey": "order-2-{{$timestamp}}"
 }
 
 > {%
@@ -265,7 +285,8 @@ Content-Type: application/json
 
 {
   "userId": 1,
-  "menuId": 99999
+  "menuId": 99999,
+  "idempotencyKey": "order-3-{{$timestamp}}"
 }
 
 > {%
@@ -281,7 +302,8 @@ Content-Type: application/json
 
 {
   "userId": 99999,
-  "menuId": 1
+  "menuId": 1,
+  "idempotencyKey": "order-4-{{$timestamp}}"
 }
 
 > {%
@@ -298,7 +320,8 @@ Content-Type: application/json
 
 {
   "userId": 4,
-  "menuId": 1
+  "menuId": 1,
+  "idempotencyKey": "order-5-{{$timestamp}}"
 }
 
 > {%
@@ -313,7 +336,8 @@ POST {{baseUrl}}/api/orders
 Content-Type: application/json
 
 {
-  "userId": 1
+  "userId": 1,
+  "idempotencyKey": "order-6-{{$timestamp}}"
 }
 
 > {%
@@ -359,7 +383,8 @@ Content-Type: application/json
 
 {
   "userId": 2,
-  "menuId": 3
+  "menuId": 3,
+  "idempotencyKey": "order-7-{{$timestamp}}"
 }
 
 ### 6-3. 인기 메뉴에 카푸치노 반영 확인

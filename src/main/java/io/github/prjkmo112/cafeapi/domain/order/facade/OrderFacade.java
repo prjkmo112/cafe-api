@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Component
 @RequiredArgsConstructor
 public class OrderFacade {
@@ -23,6 +25,15 @@ public class OrderFacade {
 
     @Transactional
     public OrderDto createOrder(CreateOrderRequestDto createOrderRequestDto) {
+        // 멱등키 선조회: 이미 처리된 재시도 요청은 기존 주문을 그대로 반환
+        Optional<OrderDto> orderDto = orderService.findByIdempotencyKey(
+                createOrderRequestDto.userId(),
+                createOrderRequestDto.idempotencyKey()
+        );
+        if (orderDto.isPresent()) {
+            return orderDto.get();
+        }
+
         // 메뉴 조회
         Menu menu = menuService.getMenu(createOrderRequestDto.menuId());
 

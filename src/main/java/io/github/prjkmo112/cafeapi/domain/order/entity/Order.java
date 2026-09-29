@@ -17,6 +17,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
@@ -32,7 +33,12 @@ import java.util.UUID;
 @Getter
 @Entity
 @Table(name = "orders", indexes = {@Index(name = "idx_orders_status_created_menu",
-        columnList = "status, created_at, menu_id")})
+        columnList = "status, created_at, menu_id")}, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_orders_user_idempotency",
+                columnNames = {
+                        "user_id",
+                        "idempotency_key"})
+})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends AuditingEntity {
     @Id
@@ -63,13 +69,18 @@ public class Order extends AuditingEntity {
     @Column(name = "order_id", nullable = false, length = 64)
     private String orderId;
 
+    @Size(max = 64)
+    @Column(name = "idempotency_key", length = 64)
+    private String idempotencyKey;
+
     @Builder
-    private Order(User user, Menu menu, Long amount) {
+    private Order(User user, Menu menu, Long amount, String idempotencyKey) {
         this.user = user;
         this.menu = menu;
         this.amount = amount;
         this.status = OrderStatus.PAID;
         this.orderId = generateOrderNumber();
+        this.idempotencyKey = idempotencyKey;
     }
 
     private String generateOrderNumber() {
