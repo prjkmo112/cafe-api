@@ -1,0 +1,366 @@
+### =====================================================================
+### Cafe API 시나리오 테스트 (IntelliJ HTTP Client / VS Code REST Client)
+###
+### 사전 조건: MySQL/Redis/Kafka 기동(docker-compose up -d) 후 앱 실행.
+### 시드 데이터(data.sql) 기준: 1=홍길동(10,000P) 2=김철수(5,000P) 3=이영희(0P)
+###   메뉴: 1=아메리카노 4,000 / 2=카페라떼 4,500 / 3=카푸치노 4,500 / 4=바닐라라떼 5,000 / 5=콜드브루(SOLDOUT)
+### 위에서부터 순서대로 실행하면 각 시나리오가 성공합니다. (DB를 초기화하지 않고 재실행하면
+### 잔액/이메일 중복 때문에 일부 결과가 달라질 수 있음)
+### =====================================================================
+
+@baseUrl = http://localhost:8080
+@runId = {{$timestamp}}
+
+### ---------------------------------------------------------------------
+### 1. 사용자 등록
+### ---------------------------------------------------------------------
+
+### 1-1. [성공] 신규 사용자 등록 -> 200, 잔액 0원 user_point 동시 생성
+# @name register
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "name": "테스터",
+  "email": "tester-{{runId}}@example.com",
+  "password": "password1234"
+}
+
+> {%
+  client.test("사용자 등록 성공", function () {
+    client.assert(response.status === 200, "expected 200 but " + response.status);
+    client.assert(response.body.code === "SUCCESS");
+  });
+%}
+
+### 1-2. [실패] 같은 이메일로 재등록 -> 409 MEMBER_002
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "name": "테스터",
+  "email": "hong@example.com",
+  "password": "password1234"
+}
+
+> {%
+  client.test("이메일 중복", function () {
+    client.assert(response.status === 409);
+    client.assert(response.body.code === "MEMBER_002");
+  });
+%}
+
+### 1-3. [실패] 이메일 형식 오류 -> 400 COMMON_001
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "name": "테스터",
+  "email": "not-an-email",
+  "password": "password1234"
+}
+
+> {%
+  client.test("이메일 형식 오류", function () {
+    client.assert(response.status === 400);
+    client.assert(response.body.code === "COMMON_001");
+  });
+%}
+
+### ---------------------------------------------------------------------
+### 2. 메뉴 조회
+### ---------------------------------------------------------------------
+
+### 2-1. [성공] 전체 목록 (기본 페이징 page=0,size=10)
+GET {{baseUrl}}/api/menus
+
+> {%
+  client.test("메뉴 목록", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.content.length >= 5);
+  });
+%}
+
+### 2-2. [성공] 키워드 검색 "라떼" -> 카페라떼, 바닐라라떼
+GET {{baseUrl}}/api/menus?keyword=라떼
+
+> {%
+  client.test("키워드 검색", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.content.every(m => m.name.includes("라떼")));
+  });
+%}
+
+### 2-3. [성공] 가격 범위 4,500 ~ 5,000
+GET {{baseUrl}}/api/menus?priceStart=4500&priceEnd=5000
+
+> {%
+  client.test("가격 범위", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.content.every(m => m.price >= 4500 && m.price <= 5000));
+  });
+%}
+
+### 2-4. [성공] 품절 메뉴만 -> 콜드브루
+GET {{baseUrl}}/api/menus?status=SOLDOUT
+
+> {%
+  client.test("품절 필터", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.content.every(m => m.status === "SOLDOUT"));
+  });
+%}
+
+### 2-5. [성공] 페이징 size=2, page=1
+GET {{baseUrl}}/api/menus?page=1&size=2
+
+> {%
+  client.test("페이징", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.page === 1);
+    client.assert(response.body.data.size === 2);
+  });
+%}
+
+### 2-6. [실패] 존재하지 않는 status 값 -> 400 COMMON_001
+GET {{baseUrl}}/api/menus?status=UNKNOWN
+
+> {%
+  client.test("status 형식 오류", function () {
+    client.assert(response.status === 400);
+    client.assert(response.body.code === "COMMON_001");
+  });
+%}
+
+### ---------------------------------------------------------------------
+### 3. 포인트 충전
+### ---------------------------------------------------------------------
+
+### 3-1. [성공] 이영희(3) 5,000P 충전 -> 잔액 5000 (DB 초기 상태 기준)
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 3,
+  "point": 5000,
+  "idempotencyKey": "charge-{{runId}}"
+}
+
+> {%
+  client.test("충전 성공", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.userId === 3);
+  });
+%}
+
+### 3-2. [실패] 위와 같은 멱등키로 재요청(주의: runId 가 같은 세션에서 실행) -> 409 POINT_003, 중복 충전 없음
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 3,
+  "point": 5000,
+  "idempotencyKey": "charge-{{runId}}"
+}
+
+> {%
+  client.test("멱등키 중복", function () {
+    client.assert(response.status === 409);
+    client.assert(response.body.code === "POINT_003");
+  });
+%}
+
+### 3-3. [실패] 존재하지 않는 사용자 -> 404 MEMBER_001
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 99999,
+  "point": 1000,
+  "idempotencyKey": "charge-nouser-{{$timestamp}}"
+}
+
+> {%
+  client.test("사용자 없음", function () {
+    client.assert(response.status === 404);
+    client.assert(response.body.code === "MEMBER_001");
+  });
+%}
+
+### 3-4. [실패] 충전 금액 0 -> 400 COMMON_001
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "point": 0,
+  "idempotencyKey": "charge-zero-{{$timestamp}}"
+}
+
+> {%
+  client.test("금액 검증", function () {
+    client.assert(response.status === 400);
+    client.assert(response.body.code === "COMMON_001");
+  });
+%}
+
+### 3-5. [실패] idempotencyKey 누락 -> 400 COMMON_001
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "point": 1000
+}
+
+> {%
+  client.test("멱등키 필수", function () {
+    client.assert(response.status === 400);
+    client.assert(response.body.code === "COMMON_001");
+  });
+%}
+
+### ---------------------------------------------------------------------
+### 4. 주문/결제
+### ---------------------------------------------------------------------
+
+### 4-1. [성공] 홍길동(1)이 아메리카노(1, 4,000P) 주문 -> 200, status=PAID, amount=4000
+# @name order
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "menuId": 1
+}
+
+> {%
+  client.test("주문 성공", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.status === "PAID");
+    client.assert(response.body.data.amount === 4000);
+    client.assert(response.body.data.orderId.startsWith("ORD-"));
+  });
+%}
+
+### 4-2. [실패] 품절 메뉴 콜드브루(5) 주문 -> 409 PRODUCT_002, 포인트 차감 없음
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "menuId": 5
+}
+
+> {%
+  client.test("품절", function () {
+    client.assert(response.status === 409);
+    client.assert(response.body.code === "PRODUCT_002");
+  });
+%}
+
+### 4-3. [실패] 존재하지 않는 메뉴 -> 404 PRODUCT_001
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "menuId": 99999
+}
+
+> {%
+  client.test("메뉴 없음", function () {
+    client.assert(response.status === 404);
+    client.assert(response.body.code === "PRODUCT_001");
+  });
+%}
+
+### 4-4. [실패] 존재하지 않는 사용자 -> 404 MEMBER_001
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 99999,
+  "menuId": 1
+}
+
+> {%
+  client.test("사용자 없음", function () {
+    client.assert(response.status === 404);
+    client.assert(response.body.code === "MEMBER_001");
+  });
+%}
+
+### 4-5. [실패] 포인트 0인 신규 사용자(4번 이후 생성된 계정) 주문 -> 409 POINT_001
+###      (userId 는 1-1 에서 생성된 사용자 ID 로 바꿔서 실행. 시드 상태에서는 4)
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 4,
+  "menuId": 1
+}
+
+> {%
+  client.test("포인트 부족", function () {
+    client.assert(response.status === 409);
+    client.assert(response.body.code === "POINT_001");
+  });
+%}
+
+### 4-6. [실패] menuId 누락 -> 400 COMMON_001
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 1
+}
+
+> {%
+  client.test("필수값 누락", function () {
+    client.assert(response.status === 400);
+    client.assert(response.body.code === "COMMON_001");
+  });
+%}
+
+### ---------------------------------------------------------------------
+### 5. 인기 메뉴 (주문 후 캐시가 비워져 최신 집계가 반영되는지 확인)
+### ---------------------------------------------------------------------
+
+### 5-1. [성공] 최근 7일 주문 상위 3개 -> 방금 주문한 아메리카노 포함
+GET {{baseUrl}}/api/menus/popular
+
+> {%
+  client.test("인기 메뉴", function () {
+    client.assert(response.status === 200);
+    client.assert(response.body.data.length <= 3);
+    client.assert(response.body.data[0].count >= 1);
+  });
+%}
+
+### ---------------------------------------------------------------------
+### 6. 종합 시나리오: 충전 -> 주문 -> 인기 메뉴 반영
+###    (6-1 에서 만든 사용자로 이어서 실행, userId 는 응답 확인 후 교체)
+### ---------------------------------------------------------------------
+
+### 6-1. 김철수(2) 카푸치노 주문 전 5,000P 충전
+POST {{baseUrl}}/api/points/charge
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "point": 5000,
+  "idempotencyKey": "flow-charge-{{$timestamp}}"
+}
+
+### 6-2. 김철수(2) 카푸치노(3, 4,500P) 주문
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "menuId": 3
+}
+
+### 6-3. 인기 메뉴에 카푸치노 반영 확인
+GET {{baseUrl}}/api/menus/popular
