@@ -4,7 +4,7 @@ import io.github.prjkmo112.cafeapi.domain.order.entity.Order;
 import io.github.prjkmo112.cafeapi.domain.order.entity.OrderStatus;
 
 public record OrderDto(
-        Long memberId,
+        Long userId,
         Long menuId,
         String orderId,
         Long amount,
