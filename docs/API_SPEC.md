@@ -37,6 +37,7 @@
 | 요청 바디 파싱 실패 | 400 | `COMMON_001` |
 | 쿼리 파라미터 타입 불일치 | 400 | `COMMON_001` |
 | 비즈니스 예외(`BusinessException`) | 예외별 `ErrorCode.status` | 예외별 `ErrorCode.code` |
+| 비관적 락 대기 시간 초과 | 503 | `COMMON_004` |
 | 그 외 처리되지 않은 예외 | 500 | `COMMON_002` |
 
 전체 에러 코드는 [`ErrorCode.java`](../src/main/java/io/github/prjkmo112/cafeapi/common/exception/ErrorCode.java)에 정의되어 있습니다.
@@ -182,12 +183,15 @@
 
 사용자 식별값과 메뉴 ID를 입력받아 주문하고 결제합니다. 포인트에서 메뉴 가격만큼 차감하며, 주문 저장과 포인트 차감은 하나의 트랜잭션입니다. 결제가 완료되면 사용자 식별값, 메뉴 ID, 결제금액을 Kafka(`order-paid` 토픽)로 발행해 데이터 수집 플랫폼(Mock 소비자로 대체) 쪽에 실시간으로 전달합니다.
 
+같은 `idempotencyKey`로 재요청하면 새로 주문하지 않고 **기존 주문을 그대로 반환**하며 포인트도 다시 차감하지 않습니다. 키는 사용자 단위로 관리됩니다.
+
 **Request Body**
 
 ```json
 {
   "userId": 1,
-  "menuId": 1
+  "menuId": 1,
+  "idempotencyKey": "order-20260929-0001"
 }
 ```
 
@@ -195,6 +199,7 @@
 |---|---|---|---|
 | `userId` | Long | O | 사용자 ID |
 | `menuId` | Long | O | 메뉴 ID |
+| `idempotencyKey` | String | O | 요청 단위 고유 키(최대 64자). 재시도 시 같은 값을 보내야 함 |
 
 **Response** `200 OK`
 
@@ -219,6 +224,9 @@
 | 404 | `PRODUCT_001` | 존재하지 않는 메뉴 |
 | 409 | `PRODUCT_002` | 품절된 메뉴(`SOLDOUT`). 메시지는 "재고가 부족합니다." |
 | 409 | `POINT_001` | 포인트 부족 |
+| 400 | `COMMON_001` | 입력값 검증 실패(`idempotencyKey` 누락, 빈 값, 64자 초과 등) |
+| 409 | `ORDER_011` | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
+| 503 | `COMMON_004` | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
 
 **실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다.
 
