@@ -43,6 +43,7 @@ public class MenuService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 
+    // Redis 캐시(TTL 10분). 주문 커밋 시 PopularMenuCacheEvictor 가 비움
     @Cacheable(
             cacheNames = CacheNames.POPULAR_MENUS,
             key = "'beforeDays:' + #beforeDays + ':pageSize:' + #pageable.pageSize"

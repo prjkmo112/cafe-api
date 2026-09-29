@@ -15,6 +15,7 @@ public class OrderProducer {
 
     private final KafkaTemplate<String, OrderPaidEvent> orderPaidEventKafkaTemplate;
 
+    // 커밋 이후 별도 스레드에서 발행해 Kafka 지연/장애가 주문 응답에 영향을 주지 않게 함
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void send(OrderPaidEvent event) {

@@ -11,6 +11,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class PopularMenuCacheEvictor {
 
+    // 주문 커밋 후 인기 메뉴 캐시 무효화 (본문 없이 어노테이션이 동작을 수행)
     @Async
     @CacheEvict(cacheNames = CacheNames.POPULAR_MENUS, allEntries = true)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

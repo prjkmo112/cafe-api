@@ -22,6 +22,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    // OrderFacade 의 결제 트랜잭션 안에서만 호출
     @Transactional(propagation = Propagation.MANDATORY)
     public OrderDto createOrder(CreateOrderRequestDto createOrderRequestDto, Menu menu) {
         Order order = Order.builder()

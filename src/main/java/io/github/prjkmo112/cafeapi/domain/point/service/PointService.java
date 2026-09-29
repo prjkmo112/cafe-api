@@ -27,11 +27,13 @@ public class PointService {
 
     @Transactional
     public PointDto charge(PointChargeRequestDto dto) {
+        // 멱등키 선조회. 동시 요청은 아래 유니크 제약 예외로 걸러짐
         Optional<PointHistory> pointHistory = pointHistoryRepository.findByUserIdAndIdempotencyKey(dto.userId(), dto.idempotencyKey());
         if (pointHistory.isPresent()) {
             throw new BusinessException(ErrorCode.DUPLICATE_POINT_CHARGE_REQUEST);
         }
 
+        // 비관적 락으로 잔액 갱신 직렬화
         UserPoint userPoint = userPointRepository.findByUserIdForUpdate(dto.userId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
@@ -54,6 +56,7 @@ public class PointService {
         return PointDto.from(userPoint);
     }
 
+    // 주문 트랜잭션에 참여해야 하므로 단독 호출 불가
     @Transactional(propagation = Propagation.MANDATORY)
     public PointDto use(Long userId, Long amount) {
         UserPoint userPoint = userPointRepository.findByUserIdForUpdate(userId)
