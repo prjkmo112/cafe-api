@@ -48,14 +48,17 @@ class OrderServiceTest {
     @Test
     @DisplayName("주문을 저장하고 OrderPaidEvent 를 발행하며 PAID 상태의 OrderDto 를 반환한다")
     void createOrder_success() {
+        // given
         User user = User.builder().name("홍길동").email("hong@example.com").password("pw").build();
         ReflectionTestUtils.setField(user, "id", 1L);
         Menu menu = Menu.builder().name("아메리카노").price(4000L).status(MenuStatus.SALE).build();
         ReflectionTestUtils.setField(menu, "id", 10L);
         given(userRepository.getReferenceById(1L)).willReturn(user);
 
+        // when
         OrderDto result = orderService.createOrder(new CreateOrderRequestDto(1L, 10L, "key-1"), menu);
 
+        // then
         assertThat(result.userId()).isEqualTo(1L);
         assertThat(result.menuId()).isEqualTo(10L);
         assertThat(result.amount()).isEqualTo(4000L);
@@ -79,6 +82,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("동시 중복 요청으로 유니크 위반이 나면 DUPLICATE_ORDER_REQUEST 이고 이벤트는 발행되지 않는다")
     void createOrder_duplicateKey() {
+        // given
         User user = User.builder().name("홍길동").email("hong@example.com").password("pw").build();
         ReflectionTestUtils.setField(user, "id", 1L);
         Menu menu = Menu.builder().name("아메리카노").price(4000L).status(MenuStatus.SALE).build();
@@ -88,11 +92,13 @@ class OrderServiceTest {
 
         CreateOrderRequestDto request = new CreateOrderRequestDto(1L, 10L, "key-1");
 
+        // when & then
         assertThatThrownBy(() -> orderService.createOrder(request, menu))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.DUPLICATE_ORDER_REQUEST);
 
+        // then
         verifyNoInteractions(eventPublisher);
     }
 

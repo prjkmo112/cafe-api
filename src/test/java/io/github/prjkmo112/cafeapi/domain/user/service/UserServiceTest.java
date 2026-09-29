@@ -42,10 +42,13 @@ class UserServiceTest {
     @Test
     @DisplayName("가입하면 사용자가 저장되고 잔액 0원의 user_point 도 함께 생성된다")
     void register_success() {
+        // given
         given(userRepository.existsByEmail("hong@example.com")).willReturn(false);
 
+        // when
         UserDto result = userService.register(REQUEST);
 
+        // then
         assertThat(result.name()).isEqualTo("홍길동");
         assertThat(result.email()).isEqualTo("hong@example.com");
 
@@ -62,13 +65,16 @@ class UserServiceTest {
     @Test
     @DisplayName("이미 존재하는 이메일이면 DUPLICATE_EMAIL 이고 아무것도 저장하지 않는다")
     void register_duplicateEmail() {
+        // given
         given(userRepository.existsByEmail("hong@example.com")).willReturn(true);
 
+        // when & then
         assertThatThrownBy(() -> userService.register(REQUEST))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
 
+        // then
         verify(userRepository, never()).save(any());
         verify(userPointRepository, never()).save(any());
     }
@@ -76,14 +82,17 @@ class UserServiceTest {
     @Test
     @DisplayName("동시 가입으로 유니크 제약에 걸리면 DUPLICATE_EMAIL 이고 user_point 를 만들지 않는다")
     void register_concurrentDuplicateEmail() {
+        // given
         given(userRepository.existsByEmail("hong@example.com")).willReturn(false);
         given(userRepository.save(any(User.class))).willThrow(new DataIntegrityViolationException("users.email"));
 
+        // when & then
         assertThatThrownBy(() -> userService.register(REQUEST))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
 
+        // then
         verify(userPointRepository, never()).save(any());
     }
 

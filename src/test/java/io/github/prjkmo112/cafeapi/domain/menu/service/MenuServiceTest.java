@@ -43,6 +43,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 목록 조회 시 검색 조건이 그대로 Repository 에 전달된다")
     void getMenuList_passesFiltersToRepository() {
+        // given
         MenuListRequestDto request = new MenuListRequestDto();
         request.setKeyword("라떼");
         request.setPriceStart(4000L);
@@ -59,8 +60,10 @@ class MenuServiceTest {
         given(menuRepository.findAllMenus("라떼", 4000L, 5000L, MenuStatus.SALE, start, end, pageable))
                 .willReturn(expected);
 
+        // when
         Page<MenuDto> result = menuService.getMenuList(request, pageable);
 
+        // then
         assertThat(result).isSameAs(expected);
         assertThat(result.getContent()).extracting(MenuDto::name).containsExactly("카페라떼");
     }
@@ -68,29 +71,36 @@ class MenuServiceTest {
     @Test
     @DisplayName("조건이 없으면 null 필터로 전체 조회를 위임한다")
     void getMenuList_withoutFilters() {
+        // given
         Pageable pageable = PageRequest.of(0, 10);
         given(menuRepository.findAllMenus(null, null, null, null, null, null, pageable))
                 .willReturn(Page.empty(pageable));
 
+        // when
         Page<MenuDto> result = menuService.getMenuList(new MenuListRequestDto(), pageable);
 
+        // then
         assertThat(result.isEmpty()).isTrue();
     }
 
     @Test
     @DisplayName("존재하는 메뉴를 조회하면 메뉴를 반환한다")
     void getMenu_success() {
+        // given
         Menu menu = Menu.builder().name("아메리카노").price(4000L).status(MenuStatus.SALE).build();
         given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
 
+        // when & then
         assertThat(menuService.getMenu(1L)).isSameAs(menu);
     }
 
     @Test
     @DisplayName("존재하지 않는 메뉴를 조회하면 PRODUCT_NOT_FOUND 예외가 발생한다")
     void getMenu_notFound() {
+        // given
         given(menuRepository.findById(99L)).willReturn(Optional.empty());
 
+        // when & then
         assertThatThrownBy(() -> menuService.getMenu(99L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
@@ -100,15 +110,18 @@ class MenuServiceTest {
     @Test
     @DisplayName("인기 메뉴 조회 시 지정한 일수 이전 시점부터 집계하도록 위임한다")
     void getPopularMenus_usesStartDateFromBeforeDays() {
+        // given
         Pageable pageable = Pageable.ofSize(3);
         List<PopularMenuDto> expected = List.of(new PopularMenuDto(1L, "아메리카노", 4000L, 26L));
         given(menuRepository.findPopularMenusByDate(any(LocalDateTime.class), eq(pageable)))
                 .willReturn(expected);
 
+        // when
         LocalDateTime before = LocalDateTime.now().minusDays(7);
         List<PopularMenuDto> result = menuService.getPopularMenus(7, pageable);
         LocalDateTime after = LocalDateTime.now().minusDays(7);
 
+        // then
         assertThat(result).isEqualTo(expected);
 
         ArgumentCaptor<LocalDateTime> captor = ArgumentCaptor.forClass(LocalDateTime.class);
