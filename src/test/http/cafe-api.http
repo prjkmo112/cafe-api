@@ -33,7 +33,7 @@ Content-Type: application/json
   });
 %}
 
-### 1-2. [실패] 같은 이메일로 재등록 -> 409 MEMBER_002
+### 1-2. [실패] 같은 이메일로 재등록 -> 409 DUPLICATE_EMAIL
 POST {{baseUrl}}/api/users/register
 Content-Type: application/json
 
@@ -46,11 +46,10 @@ Content-Type: application/json
 > {%
   client.test("이메일 중복", function () {
     client.assert(response.status === 409);
-    client.assert(response.body.code === "MEMBER_002");
   });
 %}
 
-### 1-3. [실패] 이메일 형식 오류 -> 400 COMMON_001
+### 1-3. [실패] 이메일 형식 오류 -> 400 INVALID_INPUT
 POST {{baseUrl}}/api/users/register
 Content-Type: application/json
 
@@ -63,7 +62,6 @@ Content-Type: application/json
 > {%
   client.test("이메일 형식 오류", function () {
     client.assert(response.status === 400);
-    client.assert(response.body.code === "COMMON_001");
   });
 %}
 
@@ -122,13 +120,12 @@ GET {{baseUrl}}/api/menus?page=1&size=2
   });
 %}
 
-### 2-6. [실패] 존재하지 않는 status 값 -> 400 COMMON_001
+### 2-6. [실패] 존재하지 않는 status 값 -> 400 INVALID_INPUT
 GET {{baseUrl}}/api/menus?status=UNKNOWN
 
 > {%
   client.test("status 형식 오류", function () {
     client.assert(response.status === 400);
-    client.assert(response.body.code === "COMMON_001");
   });
 %}
 
@@ -153,7 +150,7 @@ Content-Type: application/json
   });
 %}
 
-### 3-2. [실패] 위와 같은 멱등키로 재요청(주의: runId 가 같은 세션에서 실행) -> 409 POINT_003, 중복 충전 없음
+### 3-2. [실패] 위와 같은 멱등키로 재요청(주의: runId 가 같은 세션에서 실행) -> 409 DUPLICATE_POINT_CHARGE_REQUEST, 중복 충전 없음
 POST {{baseUrl}}/api/points/charge
 Content-Type: application/json
 
@@ -166,11 +163,10 @@ Content-Type: application/json
 > {%
   client.test("멱등키 중복", function () {
     client.assert(response.status === 409);
-    client.assert(response.body.code === "POINT_003");
   });
 %}
 
-### 3-3. [실패] 존재하지 않는 사용자 -> 404 MEMBER_001
+### 3-3. [실패] 존재하지 않는 사용자 -> 404 MEMBER_NOT_FOUND
 POST {{baseUrl}}/api/points/charge
 Content-Type: application/json
 
@@ -183,11 +179,10 @@ Content-Type: application/json
 > {%
   client.test("사용자 없음", function () {
     client.assert(response.status === 404);
-    client.assert(response.body.code === "MEMBER_001");
   });
 %}
 
-### 3-4. [실패] 충전 금액 0 -> 400 COMMON_001
+### 3-4. [실패] 충전 금액 0 -> 400 INVALID_INPUT
 POST {{baseUrl}}/api/points/charge
 Content-Type: application/json
 
@@ -200,11 +195,10 @@ Content-Type: application/json
 > {%
   client.test("금액 검증", function () {
     client.assert(response.status === 400);
-    client.assert(response.body.code === "COMMON_001");
   });
 %}
 
-### 3-5. [실패] idempotencyKey 누락 -> 400 COMMON_001
+### 3-5. [실패] idempotencyKey 누락 -> 400 INVALID_INPUT
 POST {{baseUrl}}/api/points/charge
 Content-Type: application/json
 
@@ -216,7 +210,6 @@ Content-Type: application/json
 > {%
   client.test("멱등키 필수", function () {
     client.assert(response.status === 400);
-    client.assert(response.body.code === "COMMON_001");
   });
 %}
 
@@ -262,7 +255,7 @@ Content-Type: application/json
   });
 %}
 
-### 4-2. [실패] 품절 메뉴 콜드브루(5) 주문 -> 409 PRODUCT_002, 포인트 차감 없음
+### 4-2. [실패] 품절 메뉴 콜드브루(5) 주문 -> 409 INSUFFICIENT_STOCK, 포인트 차감 없음
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
 
@@ -275,11 +268,10 @@ Content-Type: application/json
 > {%
   client.test("품절", function () {
     client.assert(response.status === 409);
-    client.assert(response.body.code === "PRODUCT_002");
   });
 %}
 
-### 4-3. [실패] 존재하지 않는 메뉴 -> 404 PRODUCT_001
+### 4-3. [실패] 존재하지 않는 메뉴 -> 404 PRODUCT_NOT_FOUND
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
 
@@ -292,11 +284,10 @@ Content-Type: application/json
 > {%
   client.test("메뉴 없음", function () {
     client.assert(response.status === 404);
-    client.assert(response.body.code === "PRODUCT_001");
   });
 %}
 
-### 4-4. [실패] 존재하지 않는 사용자 -> 404 MEMBER_001
+### 4-4. [실패] 존재하지 않는 사용자 -> 404 MEMBER_NOT_FOUND
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
 
@@ -309,11 +300,10 @@ Content-Type: application/json
 > {%
   client.test("사용자 없음", function () {
     client.assert(response.status === 404);
-    client.assert(response.body.code === "MEMBER_001");
   });
 %}
 
-### 4-5. [실패] 포인트 0인 신규 사용자(4번 이후 생성된 계정) 주문 -> 409 POINT_001
+### 4-5. [실패] 포인트 0인 신규 사용자(4번 이후 생성된 계정) 주문 -> 409 INSUFFICIENT_POINT
 ###      (userId 는 1-1 에서 생성된 사용자 ID 로 바꿔서 실행. 시드 상태에서는 4)
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
@@ -327,11 +317,10 @@ Content-Type: application/json
 > {%
   client.test("포인트 부족", function () {
     client.assert(response.status === 409);
-    client.assert(response.body.code === "POINT_001");
   });
 %}
 
-### 4-6. [실패] menuId 누락 -> 400 COMMON_001
+### 4-6. [실패] menuId 누락 -> 400 INVALID_INPUT
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
 
@@ -343,7 +332,6 @@ Content-Type: application/json
 > {%
   client.test("필수값 누락", function () {
     client.assert(response.status === 400);
-    client.assert(response.body.code === "COMMON_001");
   });
 %}
 

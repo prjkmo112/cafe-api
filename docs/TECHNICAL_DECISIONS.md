@@ -54,14 +54,14 @@ sequenceDiagram
     C->>S: POST /api/points/charge {userId, point, idempotencyKey}
     S->>DB: 1) point_history 에서 (userId, key) 조회
     alt 이미 존재
-        S-->>C: 409 POINT_003 (이미 처리된 충전 요청)
+        S-->>C: 409 DUPLICATE_POINT_CHARGE_REQUEST (이미 처리된 충전 요청)
     else 없음
         S->>DB: 2) user_point SELECT ... FOR UPDATE (행 락)
         S->>S: 3) balance += point
         S->>DB: 4) point_history INSERT (CHARGE, key)
         Note over DB: UNIQUE(user_id, idempotency_key)
         alt 동시 요청이 먼저 INSERT 함 (유니크 위반)
-            S-->>C: 409 POINT_003 (롤백 → 잔액 변경도 취소)
+            S-->>C: 409 DUPLICATE_POINT_CHARGE_REQUEST (롤백 → 잔액 변경도 취소)
         else 성공
             S-->>C: 200 {userId, point(잔액)}
         end
@@ -97,7 +97,7 @@ sequenceDiagram
 
 - 메뉴 확인 → 포인트 차감 → 주문 저장이 전부 성공하거나 전부 롤백됩니다. "포인트만 깎이고 주문이 없는" 상태는 불가능합니다.
 - `PointService.use()` 와 `OrderService.createOrder()` 는 `Propagation.MANDATORY` 입니다. 트랜잭션 밖에서 단독 호출하면 예외가 나므로, **"차감이 주문 트랜잭션 밖에서 실행되는 실수"를 코드 레벨에서 막습니다.**
-- **재시도 안전성**: 충전과 같은 방식의 멱등키를 주문에도 적용했습니다. `orders`에 `(user_id, idempotency_key)` 유니크 제약을 두고, 이미 처리된 키는 선조회로 기존 주문을 반환합니다. 선조회와 저장 사이에 동시 요청이 끼어들면 유니크 위반으로 트랜잭션 전체(포인트 차감 포함)가 롤백되고 `ORDER_011`(409)이 나갑니다. 충전은 중복을 에러로 거절하지만, 주문은 순차 재시도에 원래 결과를 돌려줍니다. 클라이언트가 응답을 못 받고 재시도하는 경우가 흔해서입니다.
+- **재시도 안전성**: 충전과 같은 방식의 멱등키를 주문에도 적용했습니다. `orders`에 `(user_id, idempotency_key)` 유니크 제약을 두고, 이미 처리된 키는 선조회로 기존 주문을 반환합니다. 선조회와 저장 사이에 동시 요청이 끼어들면 유니크 위반으로 트랜잭션 전체(포인트 차감 포함)가 롤백되고 `DUPLICATE_ORDER_REQUEST`(409)가 나갑니다. 충전은 중복을 에러로 거절하지만, 주문은 순차 재시도에 원래 결과를 돌려줍니다. 클라이언트가 응답을 못 받고 재시도하는 경우가 흔해서입니다.
 - **컬럼은 nullable**: 기존 주문 행이 있는 DB에 `ddl-auto: update`로 컬럼이 추가되므로 NOT NULL로 두면 기존 행이 빈 문자열로 채워져 유니크 제약이 깨집니다. MySQL은 NULL이 여러 개여도 유니크 위반이 아니고, 신규 요청은 DTO에서 필수로 강제합니다.
 
 ### 락 대기 시간 제한
@@ -105,7 +105,7 @@ sequenceDiagram
 같은 사용자의 주문과 충전은 `user_point` 행 락에서 줄을 섭니다. 앞선 트랜잭션이 지연되면 뒤 요청이 MySQL 기본값(`innodb_lock_wait_timeout` 50초)만큼 스레드와 DB 커넥션을 붙잡아, 커넥션 풀이 고갈되면 **다른 사용자의 요청까지** 멈춥니다.
 
 - JDBC URL에 `sessionVariables=innodb_lock_wait_timeout=3`을 두어 3초 안에 락을 못 얻으면 실패시킵니다. Hibernate의 `jakarta.persistence.lock.timeout` 힌트는 MySQL 다이얼렉트에서 무시되어 쓰지 않았습니다.
-- 실패는 `LOCK_TIMEOUT`(503, `COMMON_004`)으로 응답하고, 멱등키가 있어 클라이언트는 같은 키로 안전하게 재시도할 수 있습니다.
+- 실패는 `LOCK_TIMEOUT`(503)으로 응답하고, 멱등키가 있어 클라이언트는 같은 키로 안전하게 재시도할 수 있습니다.
 - 이 값은 커넥션 전체에 적용됩니다. 3초를 넘는 락 대기가 정상인 작업이 생기면 조정이 필요합니다.
 
 ---

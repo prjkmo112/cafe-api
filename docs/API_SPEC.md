@@ -26,19 +26,19 @@
 
 ```json
 {
-  "code": "COMMON_001",
+  "code": "에러 코드",
   "message": "입력값이 올바르지 않습니다."
 }
 ```
 
 | 상황 | HTTP | code |
 |---|---|---|
-| Bean Validation 실패(`@Valid`) | 400 | `COMMON_001` |
-| 요청 바디 파싱 실패 | 400 | `COMMON_001` |
-| 쿼리 파라미터 타입 불일치 | 400 | `COMMON_001` |
+| Bean Validation 실패(`@Valid`) | 400 | `INVALID_INPUT` |
+| 요청 바디 파싱 실패 | 400 | `INVALID_INPUT` |
+| 쿼리 파라미터 타입 불일치 | 400 | `INVALID_INPUT` |
 | 비즈니스 예외(`BusinessException`) | 예외별 `ErrorCode.status` | 예외별 `ErrorCode.code` |
-| 비관적 락 대기 시간 초과 | 503 | `COMMON_004` |
-| 그 외 처리되지 않은 예외 | 500 | `COMMON_002` |
+| 비관적 락 대기 시간 초과 | 503 | `LOCK_TIMEOUT` |
+| 그 외 처리되지 않은 예외 | 500 | `INTERNAL_ERROR` |
 
 전체 에러 코드는 [`ErrorCode.java`](../src/main/java/io/github/prjkmo112/cafeapi/common/exception/ErrorCode.java)에 정의되어 있습니다.
 
@@ -97,7 +97,7 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 400 | `COMMON_001` | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값) |
+| 400 | `INVALID_INPUT` | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값) |
 
 ---
 
@@ -171,9 +171,9 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 404 | `MEMBER_001` | 존재하지 않는 사용자 |
-| 400 | `COMMON_001` | 입력값 검증 실패(`userId`/`point`가 1 미만, `idempotencyKey`가 비어 있음 등). 충전 금액 0 이하는 검증 단계에서 먼저 걸러지며, `POINT_002`는 도메인 로직의 방어선이라 정상 경로에서는 노출되지 않음 |
-| 409 | `POINT_003` | 이미 처리된 충전 요청(같은 `idempotencyKey`로 재요청, 동시 요청 포함) |
+| 404 | `MEMBER_NOT_FOUND` | 존재하지 않는 사용자 |
+| 400 | `INVALID_INPUT` | 입력값 검증 실패(`userId`/`point`가 1 미만, `idempotencyKey`가 비어 있음 등). 충전 금액 0 이하는 검증 단계에서 먼저 걸러지며, `INVALID_POINT_AMOUNT`는 도메인 로직의 방어선이라 정상 경로에서는 노출되지 않음 |
+| 409 | `DUPLICATE_POINT_CHARGE_REQUEST` | 이미 처리된 충전 요청(같은 `idempotencyKey`로 재요청, 동시 요청 포함) |
 
 ---
 
@@ -220,13 +220,13 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 404 | `MEMBER_001` | 존재하지 않는 사용자 |
-| 404 | `PRODUCT_001` | 존재하지 않는 메뉴 |
-| 409 | `PRODUCT_002` | 품절된 메뉴(`SOLDOUT`). 메시지는 "재고가 부족합니다." |
-| 409 | `POINT_001` | 포인트 부족 |
-| 400 | `COMMON_001` | 입력값 검증 실패(`idempotencyKey` 누락, 빈 값, 64자 초과 등) |
-| 409 | `ORDER_011` | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
-| 503 | `COMMON_004` | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
+| 404 | `MEMBER_NOT_FOUND` | 존재하지 않는 사용자 |
+| 404 | `PRODUCT_NOT_FOUND` | 존재하지 않는 메뉴 |
+| 409 | `INSUFFICIENT_STOCK` | 품절된 메뉴(`SOLDOUT`). 메시지는 "재고가 부족합니다." |
+| 409 | `INSUFFICIENT_POINT` | 포인트 부족 |
+| 400 | `INVALID_INPUT` | 입력값 검증 실패(`idempotencyKey` 누락, 빈 값, 64자 초과 등) |
+| 409 | `DUPLICATE_ORDER_REQUEST` | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
+| 503 | `LOCK_TIMEOUT` | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
 
 **실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다.
 
@@ -255,5 +255,5 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 400 | `COMMON_001` | 필수값 누락, 이메일 형식 오류 |
-| 409 | `MEMBER_002` | 이미 존재하는 이메일(동시 가입 요청 포함) |
+| 400 | `INVALID_INPUT` | 필수값 누락, 이메일 형식 오류 |
+| 409 | `DUPLICATE_EMAIL` | 이미 존재하는 이메일(동시 가입 요청 포함) |
