@@ -163,15 +163,3 @@ public void send(OrderPaidEvent event) {
 | **`ErrorCode` + `BusinessException`** | HTTP 상태, 에러 코드, 메시지를 enum 한 곳에서 관리 | 서비스는 `throw new BusinessException(ErrorCode.X)` 만 하면 됨 |
 | **`GlobalExceptionHandler`** | 검증/파싱 오류는 400, 비즈니스 예외는 지정 상태, 그 외는 500(내부 메시지 미노출) | 예외 → 응답 변환을 컨트롤러에서 분리 |
 | **`open-in-view: false`** | 트랜잭션 밖 지연 로딩 차단 | DB 커넥션이 뷰 렌더링까지 점유되는 것을 방지 |
-
----
-
-## 8. 검증한 것과 남은 것
-
-| 시나리오 | 결과 | 방법 |
-|---|---|---|
-| 잔액이 정확히 1건분일 때 같은 메뉴를 동시에 2번 주문 | 1건만 성공, 잔액 0 (음수 아님) | 동시 curl 요청 |
-| 같은 `idempotencyKey` 로 충전 2건 동시 요청 | 1건만 성공(409), `point_history` 에 1건만 기록 | 동시 curl 요청 |
-| Redis 컨테이너 중단 후 인기 메뉴 조회 | 500 없이 DB 집계로 정상 응답 | 컨테이너 직접 중단 |
-
-- **남은 것**: 위 시나리오는 수동으로 검증했고 **자동화된 테스트로 옮기는 작업이 남아 있습니다.** 주문 API 의 멱등키도 아직 없습니다.
