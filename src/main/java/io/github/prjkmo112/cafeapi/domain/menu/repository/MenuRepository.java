@@ -25,7 +25,7 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, MenuRepositor
            WHERE o.status NOT IN ('CANCELED')
            AND o.createdAt >= :startDate
            GROUP BY m.id, m.name, m.price
-           ORDER BY COUNT(o.id) DESC
+           ORDER BY COUNT(o.id) DESC, m.id ASC
           """)
     List<PopularMenuDto> findPopularMenusByDate(
             @Param("startDate") LocalDateTime startDate,
