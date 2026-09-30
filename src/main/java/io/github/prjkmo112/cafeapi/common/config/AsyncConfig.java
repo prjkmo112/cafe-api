@@ -16,7 +16,7 @@ public class AsyncConfig {
     public static final String KAFKA_PUBLISH_EXECUTOR = "kafkaPublishExecutor";
     private static final int CORE_POOL_SIZE = 4;            // 평소 유지하는 스레드 수
     private static final int MAX_POOL_SIZE = 8;             // 최대 스레드 수 (코어를 넘는 스레드는 큐가 가득 찬 뒤에야 생성)
-    private static final int QUEUE_CAPACITY = 100;          // 큐 용량 (코어 스레드가 다 바쁠 때 대기시킬 작업 수)
+    private static final int QUEUE_CAPACITY = 1000;         // 큐 용량 (코어 스레드가 다 바쁠 때 대기시킬 작업 수)
 
     // 큐가 가득 찼을 때의 처리 정책
     // AbortPolicy: 작업을 거부하고 RejectedExecutionException 발생
