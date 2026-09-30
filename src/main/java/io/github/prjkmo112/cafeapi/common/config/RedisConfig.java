@@ -31,7 +31,7 @@ import java.util.List;
 public class RedisConfig implements CachingConfigurer {
 
     private static final Duration DEFAULT_TTL = Duration.ofSeconds(30);
-    private static final Duration POPULAR_MENUS_TTL = Duration.ofMinutes(10);
+    private static final Duration POPULAR_MENUS_TTL = Duration.ofMinutes(5);
 
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {

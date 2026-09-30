@@ -123,7 +123,7 @@ sequenceDiagram
 | Kafka 소비 → Redis ZSet 카운트 | 유실을 감수하기로 한 채널이라 "정확" 요구와 충돌. 이벤트 1건 유실이 곧 영구 오차 |
 | <ins>**✅ `orders` 직접 집계 + Redis 캐시**</ins> | Kafka, Redis 상태와 무관하게 항상 정확 |
 
-- **캐시 정책**: TTL 10분 + 주문 커밋 시 즉시 무효화(`@TransactionalEventListener(AFTER_COMMIT)`). 그래서 지연은 최대 10분이 아니라 사실상 다음 주문 직후 최신화됩니다. 무효화는 `@Async` 없이 요청 스레드에서 동기로 실행합니다. Redis 삭제 한 번이라 가볍고, 주문 응답이 나가기 전에 끝나서 주문 직후 조회가 낡은 순위를 받지 않으며, 별도 큐가 없으니 포화로 무효화가 버려질 일도 없기 때문입니다. 대신 Redis가 응답하지 않을 때 주문 응답이 매달리지 않도록 연결/명령 타임아웃을 각 2초로 제한했고, 삭제 실패는 아래 `CacheErrorHandler`가 삼켜 주문 응답에 전파되지 않습니다. 키가 `beforeDays`/`pageSize` 조합별이라 특정 키만 지울 수 없어 `allEntries = true` 로 전체를 비웁니다.
+- **캐시 정책**: TTL 5분 + 주문 커밋 시 즉시 무효화(`@TransactionalEventListener(AFTER_COMMIT)`). 그래서 지연은 최대 5분이 아니라 사실상 다음 주문 직후 최신화됩니다. 무효화는 `@Async` 없이 요청 스레드에서 동기로 실행합니다. Redis 삭제 한 번이라 가볍고, 주문 응답이 나가기 전에 끝나서 주문 직후 조회가 낡은 순위를 받지 않으며, 별도 큐가 없으니 포화로 무효화가 버려질 일도 없기 때문입니다. 대신 Redis가 응답하지 않을 때 주문 응답이 매달리지 않도록 연결/명령 타임아웃을 각 2초로 제한했고, 삭제 실패는 아래 `CacheErrorHandler`가 삼켜 주문 응답에 전파되지 않습니다. 키가 `beforeDays`/`pageSize` 조합별이라 특정 키만 지울 수 없어 `allEntries = true` 로 전체를 비웁니다.
 - **장애 격리**: `CacheErrorHandler` 가 캐시 조회/저장/삭제 실패를 로그만 남기고 삼킵니다. Redis 컨테이너를 내려 직접 확인했고, 이때도 DB 집계로 정상 응답합니다.
 - **직렬화**: 인기 메뉴 캐시는 `JacksonJsonRedisSerializer<List<PopularMenuDto>>` 로 타입을 고정해 JSON 저장합니다. record 는 `Serializable` 이 아니라 기본 JDK 직렬화가 예외를 냈던 것을 재현해 확인했습니다. 그 밖의 캐시 기본값은 `PolymorphicTypeValidator`(신뢰 패키지 화이트리스트)를 둔 `GenericJacksonJsonRedisSerializer` 를 씁니다.
 - **트레이드오프**: 주문이 몰리면 무효화가 잦아 DB 재계산이 늘어납니다. 정확성을 우선한 선택이며, 트래픽이 커지면 TTL 을 늘리고 즉시 무효화를 포기하는 쪽으로 조정할 수 있습니다.
