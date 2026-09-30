@@ -83,6 +83,7 @@ erDiagram
         BIGINT amount "주문 시점 가격 스냅샷"
         VARCHAR status "PAID 등"
         VARCHAR order_id "주문번호 (ORD-yyyyMMddHHmmss-random)"
+        VARCHAR idempotency_key "주문 재시도 중복 방지, UK(user_id, idempotency_key)"
         DATETIME created_at "INDEX(status, created_at, menu_id) — 인기 메뉴 집계용"
     }
 ```
@@ -127,7 +128,7 @@ erDiagram
 | DB 유니크 제약 | 충전, 주문 멱등성 방어 | 애플리케이션 코드의 사전 체크는 조회~삽입 사이 틈이 있어 동시 요청 2개가 모두 통과할 수 있음. DB 제약이 최종 방어선 |
 | QueryDSL | 메뉴 목록 조회 | 선택 조건 6개를 임의로 조합하는 동적 쿼리라, 문자열 조립이나 메서드 이름 쿼리로는 감당이 안 됨 |
 | Kafka | 주문 내역 실시간 전송 | 데이터 수집 플랫폼 연동을 브로커 기반으로 흉내내기 위함. 로컬 재현성을 위해 단일 브로커(KRaft)로 구성했고, 운영이라면 브로커 3대, 복제 계수 3, `min.insync.replicas=2`를 전제로 함 |
-| `ApplicationEventPublisher` + `@TransactionalEventListener(AFTER_COMMIT)` | Kafka 발행, 인기 메뉴 캐시 무효화 | 트랜잭션 커밋 여부와 Kafka/Redis 호출을 분리하는 Spring 표준 패턴. 커밋된 경우에만 실행되고, `@Async`로 요청 스레드와도 분리함 |
+| `ApplicationEventPublisher` + `@TransactionalEventListener(AFTER_COMMIT)` | Kafka 발행, 인기 메뉴 캐시 무효화 | 트랜잭션 커밋 여부와 Kafka/Redis 호출을 분리하는 Spring 표준 패턴. 커밋된 경우에만 실행됨. Kafka 발행은 전용 스레드 풀(`@Async`)로 요청 스레드와 분리하고, 인기 메뉴 캐시 무효화는 가벼운 Redis 삭제라 동기로 처리해 주문 응답 전에 최신화함(Redis 타임아웃 2초) |
 | Redis (Spring Cache) | 인기 메뉴 캐시 | 매 요청마다 `GROUP BY` 집계 쿼리를 다시 태우지 않기 위한 짧은 TTL 캐시. 원본은 항상 DB |
 | springdoc-openapi | 전체 API | Swagger UI로 별도 클라이언트 없이 API를 확인, 호출하기 위함 |
 | Docker Compose | MySQL/Redis/Kafka | `docker compose up` 한 번으로 동일한 환경을 재현하기 위함 |
@@ -139,5 +140,5 @@ erDiagram
 | **다수 서버, 인스턴스** | 잔액 갱신은 DB 비관적 락, 충전 멱등성은 DB 유니크 제약으로 처리해 인스턴스 수와 무관하게 동일하게 동작합니다. Kafka 발행, 캐시 무효화도 각 요청이 자신의 트랜잭션 커밋 후 스스로 처리하는 구조라, 별도 리더 선출이나 인스턴스 간 조율이 필요 없습니다. |
 | **동시성** | 실제로 두 가지를 동시 요청으로 재현해 검증했습니다. 1) 잔액이 정확히 1건분일 때 같은 메뉴를 동시에 2번 주문 → 1건만 성공, 잔액 0(음수 아님). 2) 같은 idempotencyKey로 포인트 충전 2건 동시 요청 → 1건만 성공(409), `point_history`엔 정확히 1건만 기록. 주문에도 멱등키를 적용했고(단위 테스트로 검증), 락 대기는 3초로 제한했습니다. |
 | **데이터 일관성** | 메뉴 조회 → 재고 확인 → 포인트 차감 → 주문 저장이 하나의 트랜잭션(`OrderFacade.createOrder`)입니다. 실패 시 전부 롤백되어 "포인트만 깎이고 주문은 없는" 상태가 생기지 않습니다. |
-| **테스트** | http, Junit 두 방법으로 테스트 코드 작성 완료했습니다. |
+| **테스트** | http 시나리오(`src/test/http/cafe-api.http`)와 JUnit 단위 테스트(Mockito)로 작성했습니다. 동시성은 http로 직접 재현해 확인했고, 동시성을 자동으로 검증하는 통합 테스트는 아직 없습니다. |
 

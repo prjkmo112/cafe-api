@@ -58,12 +58,15 @@
 | `priceStart` | Long | X | 최소 가격 (원) |
 | `priceEnd` | Long | X | 최대 가격 (원) |
 | `status` | String | X | 메뉴 상태 (`SALE`, `SOLDOUT`) |
-| `createdAtStart` | String(LocalDateTime) | X | 등록일 검색 시작 (예: `2026-09-01T00:00:00`) |
-| `createdAtEnd` | String(LocalDateTime) | X | 등록일 검색 종료 |
+| `createdAtStart` | String(LocalDateTime) | X | 등록일 검색 시작. 형식은 `yyyy-MM-dd HH:mm:ss` (예: `2026-09-01 00:00:00`, 소수 초는 선택) |
+| `createdAtEnd` | String(LocalDateTime) | X | 등록일 검색 종료. 형식은 시작과 동일 |
 | `page` | Integer | X | 페이지 번호 (0부터, 기본값 0) |
 | `size` | Integer | X | 페이지 크기 (기본값 10) |
+| `sort` | String | X | 정렬 기준 `필드,방향` (예: `sort=price,desc`). 여러 개 지정 가능 |
 
-> `sort` 파라미터는 현재 실제 정렬에 반영되지 않는 알려진 이슈가 있습니다.
+- 정렬 가능한 필드는 `name`, `price`, `status`, `createdAt`이며, 그 외 값은 400(`INVALID_INPUT`)입니다.
+- 정렬 값이 같은 메뉴끼리도 순서가 흔들리지 않도록 항상 마지막에 `id` 오름차순이 추가됩니다. `sort`를 주지 않으면 `id` 오름차순입니다.
+- 응답의 `createdAt`은 ISO 형식(`2026-09-22T14:00:00`)으로 내려가며, 요청 파라미터 형식과 다릅니다.
 
 **Response** `200 OK`
 
@@ -97,7 +100,7 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 400 | `INVALID_INPUT` | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값) |
+| 400 | `INVALID_INPUT` | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값, 날짜 형식 불일치, 정렬이 허용되지 않는 필드) |
 
 ---
 
@@ -127,7 +130,7 @@
 | `data[].price` | Long | 가격 (원) |
 | `data[].count` | Long | 최근 7일간 주문 횟수 |
 
-**정확성과 성능**: 원본은 항상 `orders` 테이블 직접 집계이며, Redis에는 계산 결과를 최대 10분(TTL) 동안만 캐시합니다. 또한 주문이 성공적으로 커밋될 때마다 캐시를 즉시 비워서, 다음 조회는 최신 데이터로 다시 계산됩니다. Redis가 죽어 있어도(직접 재현해 확인) 이 API는 DB로 폴백되어 정상 응답합니다.
+**정확성과 성능**: 원본은 항상 `orders` 테이블 직접 집계이며, Redis에는 계산 결과를 최대 10분(TTL) 동안만 캐시합니다. 또한 주문이 성공적으로 커밋될 때마다 캐시를 즉시 비워서, 다음 조회는 최신 데이터로 다시 계산됩니다. 이 무효화는 별도 스레드가 아니라 요청 스레드에서 동기로 실행되어 주문 응답이 나가기 전에 끝납니다(Redis 연결/명령 타임아웃 각 2초). Redis가 죽어 있어도(직접 재현해 확인) 이 API는 DB로 폴백되어 정상 응답합니다.
 
 ---
 
@@ -228,7 +231,7 @@
 | 409 | `DUPLICATE_ORDER_REQUEST` | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
 | 503 | `LOCK_TIMEOUT` | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
 
-**실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다.
+**실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`(전용 스레드 풀 `kafkaPublishExecutor`, 스레드 이름 접두사 `kafka-pub-`)로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다. 풀의 큐(100건)까지 가득 차면 새 이벤트는 로그를 남기고 버려집니다(`DiscardPolicy`).
 
 ---
 

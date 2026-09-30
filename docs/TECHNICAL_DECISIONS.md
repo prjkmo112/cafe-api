@@ -30,6 +30,7 @@
 - **조건이 없으면 생략**: 각 조건을 `BooleanExpression` 으로 분리하고 값이 없으면 `null` 을 반환합니다. `BooleanBuilder.and(null)` 은 무시되므로 `if` 분기가 필요 없습니다.
 - **컴파일 타임 검증**: `QMenu.menu.price` 처럼 Q-class 를 쓰므로 필드명 오타와 타입 불일치가 컴파일에서 잡힙니다.
 - **조회와 count 가 같은 조건 공유**: 같은 `builder` 를 두 쿼리에 쓰므로 조건이 어긋날 수 없습니다.
+- **정렬은 화이트리스트**: 클라이언트가 보낸 `sort` 문자열을 그대로 쿼리에 쓰지 않고, 허용한 필드(`name`, `price`, `status`, `createdAt`)만 Q-class 필드로 매핑합니다. 그 외 값은 400입니다. 마지막에 `id` 오름차순을 항상 붙여, 정렬 값이 같은 행이 있어도 페이지 경계에서 중복이나 누락이 생기지 않게 했습니다.
 - **범위 판단**: 조건이 고정된 인기 메뉴 집계(7일, 3개)는 QueryDSL 없이 JPQL `@Query` 로 처리했습니다. 동적 조합이 없는 곳까지 통일하지 않았습니다.
 
 ---
@@ -122,7 +123,7 @@ sequenceDiagram
 | Kafka 소비 → Redis ZSet 카운트 | 유실을 감수하기로 한 채널이라 "정확" 요구와 충돌. 이벤트 1건 유실이 곧 영구 오차 |
 | <ins>**✅ `orders` 직접 집계 + Redis 캐시**</ins> | Kafka, Redis 상태와 무관하게 항상 정확 |
 
-- **캐시 정책**: TTL 10분 + 주문 커밋 시 즉시 무효화(`@TransactionalEventListener(AFTER_COMMIT)`). 그래서 지연은 최대 10분이 아니라 사실상 다음 주문 직후 최신화됩니다. 키가 `beforeDays`/`pageSize` 조합별이라 특정 키만 지울 수 없어 `allEntries = true` 로 전체를 비웁니다.
+- **캐시 정책**: TTL 10분 + 주문 커밋 시 즉시 무효화(`@TransactionalEventListener(AFTER_COMMIT)`). 그래서 지연은 최대 10분이 아니라 사실상 다음 주문 직후 최신화됩니다. 무효화는 `@Async` 없이 요청 스레드에서 동기로 실행합니다. Redis 삭제 한 번이라 가볍고, 주문 응답이 나가기 전에 끝나서 주문 직후 조회가 낡은 순위를 받지 않으며, 별도 큐가 없으니 포화로 무효화가 버려질 일도 없기 때문입니다. 대신 Redis가 응답하지 않을 때 주문 응답이 매달리지 않도록 연결/명령 타임아웃을 각 2초로 제한했고, 삭제 실패는 아래 `CacheErrorHandler`가 삼켜 주문 응답에 전파되지 않습니다. 키가 `beforeDays`/`pageSize` 조합별이라 특정 키만 지울 수 없어 `allEntries = true` 로 전체를 비웁니다.
 - **장애 격리**: `CacheErrorHandler` 가 캐시 조회/저장/삭제 실패를 로그만 남기고 삼킵니다. Redis 컨테이너를 내려 직접 확인했고, 이때도 DB 집계로 정상 응답합니다.
 - **직렬화**: 인기 메뉴 캐시는 `JacksonJsonRedisSerializer<List<PopularMenuDto>>` 로 타입을 고정해 JSON 저장합니다. record 는 `Serializable` 이 아니라 기본 JDK 직렬화가 예외를 냈던 것을 재현해 확인했습니다. 그 밖의 캐시 기본값은 `PolymorphicTypeValidator`(신뢰 패키지 화이트리스트)를 둔 `GenericJacksonJsonRedisSerializer` 를 씁니다.
 - **트레이드오프**: 주문이 몰리면 무효화가 잦아 DB 재계산이 늘어납니다. 정확성을 우선한 선택이며, 트래픽이 커지면 TTL 을 늘리고 즉시 무효화를 포기하는 쪽으로 조정할 수 있습니다.
@@ -142,7 +143,7 @@ sequenceDiagram
 eventPublisher.publishEvent(OrderPaidEvent.from(order));
 
 // OrderProducer
-@Async
+@Async(AsyncConfig.KAFKA_PUBLISH_EXECUTOR)
 @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 public void send(OrderPaidEvent event) {
     orderPaidEventKafkaTemplate.send(KafkaTopics.ORDER_PAID_EVENT, event);
@@ -150,7 +151,9 @@ public void send(OrderPaidEvent event) {
 ```
 
 - **커밋 후에만 실행**: 주문이 롤백되면 리스너가 호출되지 않아 없는 주문의 이벤트가 나가지 않습니다.
-- **`@Async` 로 요청 스레드와 분리**: Kafka 가 느리거나 응답이 없어도 주문 API 응답 시간과 결과에 영향이 없습니다.
+- **`@Async` 전용 스레드 풀로 요청 스레드와 분리**: Kafka 가 느리거나 응답이 없어도 주문 API 응답 시간과 결과에 영향이 없습니다. 풀은 Kafka 발행 전용(`kafkaPublishExecutor`, 코어 4 / 최대 8 / 큐 100, 스레드 이름 `kafka-pub-`)이며, 캐시 무효화 같은 다른 작업과 섞이지 않습니다.
+- **큐가 가득 차면 버림**: 거절 정책은 `DiscardPolicy`(로그를 남기고 폐기)입니다. `CallerRunsPolicy`로 두면 브로커 장애 때 주문 요청 스레드가 Kafka 호출을 떠맡아 응답이 느려지므로, 유실을 허용한 이 채널에서는 주문 응답 보호를 우선했습니다.
+- **종료 처리**: 종료 시 큐에 남은 이벤트를 최대 10초까지 마무리하고 종료합니다.
 - **다중 인스턴스**: 각 요청이 자기 트랜잭션 커밋 후 스스로 발행하므로 리더 선출이나 인스턴스 간 조율이 필요 없습니다.
 - **수신 측**: 데이터 수집 플랫폼은 `MockDataOrderPaidConsumer`(`@KafkaListener`)로 대체하고, 수신한 `userId`/`menuId`/`paidAmount`/`orderId` 를 로그로 남깁니다.
 - **트레이드오프 (유실 허용)**: 이 채널은 분석용이라 극소량의 유실을 알고 감수했습니다. 유실될 수 있는 경로는 다음과 같습니다.
@@ -158,8 +161,8 @@ public void send(OrderPaidEvent event) {
   | 경로 | 원인 |
   |---|---|
   | 커밋 ~ 발행 사이 | 서버가 종료되면 이벤트가 메모리에서 사라짐 (DB에는 주문이 남음) |
-  | `@Async` 큐 | 기본 실행기의 대기열에 있던 이벤트는 프로세스 종료 시 소실 |
-  | 발행 실패 | 브로커 장애 등으로 `send()` 가 실패해도 재시도나 보관이 없음 |
+  | `@Async` 큐 | 전용 풀의 큐(100건)가 가득 차면 새 이벤트를 버림. 종료 시에도 10초 안에 처리되지 못한 이벤트는 소실 |
+  | 발행 실패 | 브로커 장애 등으로 `send()` 가 실패해도 재시도나 보관이 없음. 현재는 `send()` 결과를 확인하지 않아 실패가 로그로도 남지 않음(개선 예정) |
 
   유실이 나도 **결제와 포인트 정합성에는 영향이 없고**(주문은 이미 커밋됨), 순위 조회도 이 채널에 의존하지 않아([5. 인기 메뉴](#5-인기-메뉴--db-원본-redis-사본)) 숫자가 틀어지지 않습니다. 영향은 수집 플랫폼의 분석 데이터가 극소량 비는 것에 그칩니다.
   유실이 문제가 되는 규모가 되면 Kafka 는 그대로 두고 Outbox(폴링 또는 Debezium 같은 CDC)로 전환합니다. 그 전 단계로는 발행 실패 로그와 건수 지표를 남겨, 유실을 감지할 수 있게 하는 것을 먼저 생각합니다.
