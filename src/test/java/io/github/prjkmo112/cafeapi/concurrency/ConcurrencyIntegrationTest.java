@@ -86,7 +86,7 @@ class ConcurrencyIntegrationTest {
 
     @Test
     @DisplayName("잔액이 1건분일 때 동시에 10번 주문하면 1건만 성공하고 잔액은 0이다")
-    void 동시_주문_잔액_초과_방지() throws Exception {
+    void concurrentOrders_neverOverspendBalance() throws Exception {
         // given: 잔액 4000P (메뉴 1잔분)
         pointService.charge(new PointChargeRequestDto(user.getId(), 4_000L, "init"));
 
@@ -105,7 +105,7 @@ class ConcurrencyIntegrationTest {
 
     @Test
     @DisplayName("같은 멱등키로 동시에 10번 충전하면 1건만 반영된다")
-    void 동시_충전_멱등키() throws Exception {
+    void concurrentCharges_withSameIdempotencyKey_areAppliedOnce() throws Exception {
         // when
         List<Result> results = runConcurrently(10, i ->
                 pointService.charge(new PointChargeRequestDto(user.getId(), 1_000L, "same-key")));
@@ -118,7 +118,7 @@ class ConcurrencyIntegrationTest {
 
     @Test
     @DisplayName("서로 다른 키로 동시에 20번 충전해도 잔액 합계가 정확하다 (lost update 없음)")
-    void 동시_충전_합계_정확() throws Exception {
+    void concurrentCharges_withDistinctKeys_yieldExactTotal() throws Exception {
         // when
         List<Result> results = runConcurrently(20, i ->
                 pointService.charge(new PointChargeRequestDto(user.getId(), 1_000L, "key-" + i)));
