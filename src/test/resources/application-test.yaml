@@ -1,0 +1,13 @@
+spring:
+  sql:
+    init:
+      mode: never
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  cache:
+    type: none
+  datasource:
+    hikari:
+      maximum-pool-size: 30

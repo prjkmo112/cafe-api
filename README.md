@@ -261,5 +261,27 @@ erDiagram
 #### 4. 테스트
 
 * http 시나리오(`src/test/http/cafe-api.http`)와 JUnit 단위 테스트(Mockito)로 작성했습니다.
-* 동시성은 http로 직접 재현해 확인했고, 동시성을 자동으로 검증하는 통합 테스트는 아직 없습니다.
+* 동시성은 `ConcurrencyIntegrationTest`로 Testcontainers 기반 MySQL 통합 테스트를 별도로 수행했습니다.
+
+**Testcontainers 기반 MySQL 동시성 테스트**
+
+```java
+@Container
+@ServiceConnection
+static MySQLContainer mysql = new MySQLContainer("mysql:8.4");
+```
+
+테스트를 실행하면 Docker에 임시 MySQL 컨테이너가 생성되고, `@ServiceConnection`으로 Spring Boot `DataSource`에 자동 연결됩니다. (Kafka 발행은 이 테스트의 관심사가 아니라서 `KafkaTemplate`을 Mock으로 막아뒀습니다.)
+
+`ExecutorService`와 `CountDownLatch`로 모든 스레드를 대기시켰다가 동시에 출발시켜 아래를 검증합니다.
+
+| 시나리오 | 요청 | 기대 결과 |
+|---|---|---|
+| 동시 주문 | 잔액 4,000P(1잔분)에 서로 다른 멱등키로 10건 | 1건만 성공, 나머지는 `INSUFFICIENT_POINT`, 잔액 0 |
+| 충전 멱등성 | 같은 멱등키로 10건 | 1건만 반영, `point_history` 1건 |
+| Lost Update 방지 | 서로 다른 키로 20건(각 1,000P) | 20건 모두 성공, 잔액 20,000P |
+
+이를 통해 실제 MySQL의 비관적 락과 UNIQUE 제약이 동시 요청에서도 정합성을 지키는지 확인합니다. 비관적 락을 제거하면 이 테스트가 실패함도 확인했습니다.
+
+> 테스트 실행을 위해 Docker가 실행 중이어야 합니다.
 
