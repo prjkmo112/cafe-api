@@ -30,6 +30,9 @@ import java.util.List;
 @EnableCaching
 public class RedisConfig implements CachingConfigurer {
 
+    private static final Duration DEFAULT_TTL = Duration.ofSeconds(30);
+    private static final Duration POPULAR_MENUS_TTL = Duration.ofMinutes(10);
+
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {
         return new StringRedisTemplate(factory);
@@ -67,13 +70,13 @@ public class RedisConfig implements CachingConfigurer {
         return builder -> builder
                 .cacheDefaults(
                     RedisCacheConfiguration.defaultCacheConfig()
-                            .entryTtl(Duration.ofSeconds(30))
+                            .entryTtl(DEFAULT_TTL)
                             .disableCachingNullValues()
                             .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer))
                 )
                 .withCacheConfiguration(CacheNames.POPULAR_MENUS,
                         RedisCacheConfiguration.defaultCacheConfig()
-                                .entryTtl(Duration.ofMinutes(10))
+                                .entryTtl(POPULAR_MENUS_TTL)
                                 .disableCachingNullValues()
                                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(popularMenuListSerializer()))
                 );
