@@ -17,6 +17,7 @@
 ## 🔗 Link
 
 - GitHub: https://github.com/prjkmo112/cafe-api
+- TIL: https://velog.io/@codermo/%EA%B3%BC%EC%A0%9C-%EB%8D%B0%EC%9D%B4%ED%84%B0-%EC%A0%95%ED%95%A9%EC%84%B1%EA%B3%BC-%EC%8B%A4%EC%8B%9C%EA%B0%84-%EC%B2%98%EB%A6%AC-K%EC%82%AC-%EC%84%9C%EB%B2%84-%EA%B0%9C%EB%B0%9C-%EA%B3%BC%EC%A0%9C-%EC%B9%B4%ED%8E%98-%EC%A3%BC%EB%AC%B8-API
 - API 명세서: [docs/API_SPEC.md](docs/API_SPEC.md)
 - 기술 선택 및 구현 이유: [docs/TECHNICAL_DECISIONS.md](docs/TECHNICAL_DECISIONS.md)
 
