@@ -26,21 +26,39 @@
 
 ```json
 {
-  "code": "에러 코드",
-  "message": "입력값이 올바르지 않습니다."
+  "code": "COMMON_001",
+  "message": "email: 올바른 형식의 이메일 주소여야 합니다"
 }
 ```
 
+- 응답 본문의 `code`에는 `ErrorCode.code` 값(`COMMON_001`, `MEMBER_002` 등)이 내려갑니다. `INVALID_INPUT` 같은 이름은 코드의 `ErrorCode` enum 상수명이며, 이 문서의 표에는 `code` 값과 함께 괄호로 표기합니다.
+- Bean Validation 실패의 `message`는 `필드명: 검증 메시지` 형태이고, 여러 개면 `, `로 이어 붙습니다. 쿼리 파라미터 바인딩 실패도 같은 형태(`status: Failed to convert ...`)로 내려갑니다.
+
 | 상황 | HTTP | code |
 |---|---|---|
-| Bean Validation 실패(`@Valid`) | 400 | `INVALID_INPUT` |
-| 요청 바디 파싱 실패 | 400 | `INVALID_INPUT` |
-| 쿼리 파라미터 타입 불일치 | 400 | `INVALID_INPUT` |
+| Bean Validation 실패(`@Valid`) | 400 | `COMMON_001` (`INVALID_INPUT`) |
+| 요청 바디 파싱 실패 | 400 | `COMMON_001` (`INVALID_INPUT`) |
+| 쿼리 파라미터 타입 불일치 | 400 | `COMMON_001` (`INVALID_INPUT`) |
 | 비즈니스 예외(`BusinessException`) | 예외별 `ErrorCode.status` | 예외별 `ErrorCode.code` |
-| 비관적 락 대기 시간 초과 | 503 | `LOCK_TIMEOUT` |
-| 그 외 처리되지 않은 예외 | 500 | `INTERNAL_ERROR` |
+| 비관적 락 대기 시간 초과 | 503 | `COMMON_003` (`LOCK_TIMEOUT`) |
+| 그 외 처리되지 않은 예외 | 500 | `COMMON_002` (`INTERNAL_ERROR`) |
 
-전체 에러 코드는 [`ErrorCode.java`](../src/main/java/io/github/prjkmo112/cafeapi/common/exception/ErrorCode.java)에 정의되어 있습니다.
+에러 코드 전체 목록 ([`ErrorCode.java`](../src/main/java/io/github/prjkmo112/cafeapi/common/exception/ErrorCode.java)):
+
+| code | ErrorCode | HTTP | 기본 메시지 |
+|---|---|---|---|
+| `COMMON_001` | `INVALID_INPUT` | 400 | 입력값이 올바르지 않습니다. |
+| `COMMON_002` | `INTERNAL_ERROR` | 500 | 서버 내부 오류가 발생했습니다. |
+| `COMMON_003` | `LOCK_TIMEOUT` | 503 | 요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해주세요. |
+| `MEMBER_001` | `MEMBER_NOT_FOUND` | 404 | 회원을 찾을 수 없습니다. |
+| `MEMBER_002` | `DUPLICATE_EMAIL` | 409 | 이미 존재하는 이메일입니다. |
+| `POINT_001` | `INSUFFICIENT_POINT` | 409 | 포인트가 부족합니다. |
+| `POINT_002` | `INVALID_POINT_AMOUNT` | 400 | 포인트 사용 금액이 올바르지 않습니다. |
+| `POINT_003` | `DUPLICATE_POINT_CHARGE_REQUEST` | 409 | 이미 처리된 충전 요청입니다. |
+| `PRODUCT_001` | `PRODUCT_NOT_FOUND` | 404 | 상품을 찾을 수 없습니다. |
+| `PRODUCT_002` | `INSUFFICIENT_STOCK` | 409 | 재고가 부족합니다. |
+| `ORDER_001` | `INVALID_ORDER_STATUS` | 400 | 유효하지 않은 주문 상태 변경입니다. |
+| `ORDER_002` | `DUPLICATE_ORDER_REQUEST` | 409 | 이미 처리 중인 주문 요청입니다. |
 
 ---
 
@@ -64,7 +82,7 @@
 | `size` | Integer | X | 페이지 크기 (기본값 10) |
 | `sort` | String | X | 정렬 기준 `필드,방향` (예: `sort=price,desc`). 여러 개 지정 가능 |
 
-- 정렬 가능한 필드는 `name`, `price`, `status`, `createdAt`이며, 그 외 값은 400(`INVALID_INPUT`)입니다.
+- 정렬 가능한 필드는 `name`, `price`, `status`, `createdAt`이며, 그 외 값은 400(`COMMON_001`, `INVALID_INPUT`)입니다.
 - 정렬 값이 같은 메뉴끼리도 순서가 흔들리지 않도록 항상 마지막에 `id` 오름차순이 추가됩니다. `sort`를 주지 않으면 `id` 오름차순입니다.
 - 응답의 `createdAt`은 ISO 형식(`2026-09-22T14:00:00`)으로 내려가며, 요청 파라미터 형식과 다릅니다.
 
@@ -100,7 +118,7 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 400 | `INVALID_INPUT` | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값, 날짜 형식 불일치, 정렬이 허용되지 않는 필드) |
+| 400 | `COMMON_001` (`INVALID_INPUT`) | 쿼리 파라미터 형식 오류 (예: `status`에 존재하지 않는 값, 날짜 형식 불일치, 정렬이 허용되지 않는 필드) |
 
 ---
 
@@ -154,7 +172,7 @@
 |---|---|---|---|
 | `userId` | Long | O | 사용자 ID |
 | `point` | Long | O | 충전 금액 (1 이상) |
-| `idempotencyKey` | String | O | 클라이언트가 생성하는 충전 요청 고유 키. 재시도 시 동일한 값을 그대로 보내야 함 |
+| `idempotencyKey` | String | O | 클라이언트가 생성하는 충전 요청 고유 키(최대 64자). 재시도 시 동일한 값을 그대로 보내야 함 |
 
 **Response** `200 OK`
 
@@ -174,9 +192,10 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 404 | `MEMBER_NOT_FOUND` | 존재하지 않는 사용자 |
-| 400 | `INVALID_INPUT` | 입력값 검증 실패(`userId`/`point`가 1 미만, `idempotencyKey`가 비어 있음 등). 충전 금액 0 이하는 검증 단계에서 먼저 걸러지며, `INVALID_POINT_AMOUNT`는 도메인 로직의 방어선이라 정상 경로에서는 노출되지 않음 |
-| 409 | `DUPLICATE_POINT_CHARGE_REQUEST` | 이미 처리된 충전 요청(같은 `idempotencyKey`로 재요청, 동시 요청 포함) |
+| 404 | `MEMBER_001` (`MEMBER_NOT_FOUND`) | 존재하지 않는 사용자 |
+| 400 | `COMMON_001` (`INVALID_INPUT`) | 입력값 검증 실패(`userId`/`point`가 1 미만, `idempotencyKey`가 비어 있거나 64자 초과 등). 충전 금액 0 이하는 검증 단계에서 먼저 걸러지며, `POINT_002`(`INVALID_POINT_AMOUNT`)는 도메인 로직의 방어선이라 정상 경로에서는 노출되지 않음 |
+| 409 | `POINT_003` (`DUPLICATE_POINT_CHARGE_REQUEST`) | 이미 처리된 충전 요청(같은 `idempotencyKey`로 재요청, 동시 요청 포함) |
+| 503 | `COMMON_003` (`LOCK_TIMEOUT`) | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
 
 ---
 
@@ -223,15 +242,15 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 404 | `MEMBER_NOT_FOUND` | 존재하지 않는 사용자 |
-| 404 | `PRODUCT_NOT_FOUND` | 존재하지 않는 메뉴 |
-| 409 | `INSUFFICIENT_STOCK` | 품절된 메뉴(`SOLDOUT`). 메시지는 "재고가 부족합니다." |
-| 409 | `INSUFFICIENT_POINT` | 포인트 부족 |
-| 400 | `INVALID_INPUT` | 입력값 검증 실패(`idempotencyKey` 누락, 빈 값, 64자 초과 등) |
-| 409 | `DUPLICATE_ORDER_REQUEST` | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
-| 503 | `LOCK_TIMEOUT` | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
+| 404 | `MEMBER_001` (`MEMBER_NOT_FOUND`) | 존재하지 않는 사용자 |
+| 404 | `PRODUCT_001` (`PRODUCT_NOT_FOUND`) | 존재하지 않는 메뉴 |
+| 409 | `PRODUCT_002` (`INSUFFICIENT_STOCK`) | 품절된 메뉴(`SOLDOUT`). 메시지는 "재고가 부족합니다." |
+| 409 | `POINT_001` (`INSUFFICIENT_POINT`) | 포인트 부족 |
+| 400 | `COMMON_001` (`INVALID_INPUT`) | 입력값 검증 실패(`userId`/`menuId` 누락 또는 1 미만, `idempotencyKey` 누락, 빈 값, 64자 초과 등) |
+| 409 | `ORDER_002` (`DUPLICATE_ORDER_REQUEST`) | 같은 `idempotencyKey`의 동시 요청이 먼저 처리 중. 잠시 후 같은 키로 재요청하면 기존 주문이 반환됨 |
+| 503 | `COMMON_003` (`LOCK_TIMEOUT`) | 같은 사용자의 요청이 몰려 락 대기 시간(3초)을 초과. 같은 키로 재시도 가능 |
 
-**실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`(전용 스레드 풀 `kafkaPublishExecutor`, 스레드 이름 접두사 `kafka-pub-`)로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다. 풀의 큐(100건)까지 가득 차면 새 이벤트는 로그를 남기고 버려집니다(`DiscardPolicy`).
+**실시간 전송 구조**: 결제 트랜잭션 안에서 Kafka로 직접 호출하지 않습니다. `OrderService`가 주문 저장 직후 `ApplicationEventPublisher`로 `OrderPaidEvent`를 발행하고, `OrderProducer`가 트랜잭션이 **커밋된 후에만**(`@TransactionalEventListener(AFTER_COMMIT)`) 그 이벤트를 받아 Kafka로 전송합니다. `@Async`(전용 스레드 풀 `kafkaPublishExecutor`, 스레드 이름 접두사 `kafka-pub-`)로 별도 스레드에서 처리되어, Kafka가 느려지거나 죽어 있어도 주문 API 응답에는 영향이 없습니다. 풀의 큐(1000건)까지 가득 차면 새 이벤트는 로그를 남기고 버려집니다(`DiscardPolicy`).
 
 ---
 
@@ -258,5 +277,5 @@
 
 | HTTP | code | 상황 |
 |---|---|---|
-| 400 | `INVALID_INPUT` | 필수값 누락, 이메일 형식 오류 |
-| 409 | `DUPLICATE_EMAIL` | 이미 존재하는 이메일(동시 가입 요청 포함) |
+| 400 | `COMMON_001` (`INVALID_INPUT`) | 필수값 누락, 이메일 형식 오류 |
+| 409 | `MEMBER_002` (`DUPLICATE_EMAIL`) | 이미 존재하는 이메일(동시 가입 요청 포함) |

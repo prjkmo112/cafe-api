@@ -146,7 +146,12 @@ eventPublisher.publishEvent(OrderPaidEvent.from(order));
 @Async(AsyncConfig.KAFKA_PUBLISH_EXECUTOR)
 @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 public void send(OrderPaidEvent event) {
-    orderPaidEventKafkaTemplate.send(KafkaTopics.ORDER_PAID_EVENT, event);
+    orderPaidEventKafkaTemplate.send(KafkaTopics.ORDER_PAID_EVENT, event)
+            .whenComplete((result, ex) -> {
+                if (ex != null) {
+                    log.error("Kafka 전송 실패 (OrderPaidEvent): (event={})", event, ex);
+                }
+            });
 }
 ```
 
@@ -160,7 +165,7 @@ public void send(OrderPaidEvent event) {
   - **원본이 이미 안전하게 남아 있음**: 이벤트는 주문 커밋 **이후**에만 만들어집니다. 그래서 어떤 이유로 전달이 안 되더라도 그 주문은 `orders` 테이블에 결제와 같은 트랜잭션으로 저장돼 있습니다. 사라지는 것은 원본이 아니라 "전달 시도" 한 번입니다.
   - **페이로드 전부가 원본에서 다시 만들어짐**: 이벤트 내용(`userId`/`menuId`/`paidAmount`/`orderId`)은 모두 `orders` 행의 컬럼입니다. 별도로 계산하거나 다른 곳에서만 알 수 있는 값이 없어, 원본 행에서 같은 이벤트를 그대로 다시 만들 수 있습니다(`OrderPaidEvent.from(order)` 가 그 변환입니다).
   - **누락된 주문을 가려낼 수 있음**: 발행 실패는 이벤트 내용과 함께 `ERROR` 로그로 남습니다(`send()` 의 `whenComplete`). 큐 초과로 버릴 때는 경고 로그만 남아 주문을 특정하지 못하지만, 수신 측이 받은 `orderId` 와 `orders` 의 `order_id` 를 대조하면 빠진 주문을 찾을 수 있습니다.
-  - **다시 보내도 위험하지 않음**: 수신 측이 분석용 수집이고 `orderId` 가 주문마다 유일해서, 재발행분은 `orderId` 로 중복을 걸러낼 수 있습니다.
+  - **다시 보내도 위험하지 않음**: 수신 측이 분석용 수집이고 `orderId` 가 주문마다 고유하게 생성되어(`ORD-타임스탬프-랜덤 8자리`, DB 유니크 제약은 없음), 재발행분은 `orderId` 로 중복을 걸러낼 수 있습니다.
   - **전달이 늦어져도 손해가 작음**: 이벤트는 결제 결과를 바꾸지 않고, 순위 조회도 이 채널에 의존하지 않습니다([5. 인기 메뉴](#5-인기-메뉴--db-원본-redis-사본)). 결제·포인트 정합성과 분리돼 있어 복구를 서두를 이유가 없고, 나중에 채워 넣어도 됩니다.
 
   복구가 필요해지면 `orders` 를 기간 기준으로 조회해 이벤트를 다시 발행합니다. 이 재발행 배치는 아직 구현하지 않았고, 필요해지는 시점에 붙일 계획입니다. 누락이 잦아 자동으로 채워야 할 규모가 되면 Kafka 는 그대로 두고 Outbox(폴링 또는 Debezium 같은 CDC)로 전환합니다. 그 전 단계로는 발행 실패 건수 지표를 추가해, 재발행이 필요한 시점을 먼저 알아채는 것을 생각합니다.

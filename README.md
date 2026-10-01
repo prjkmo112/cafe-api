@@ -12,7 +12,7 @@
 <br>
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
-다수 서버 환경에서도 안정적으로 동작하는 것을 목표로 한 커피숍 주문 시스템입니다. 메뉴 조회, 포인트 충전, 주문/결제, 인기 메뉴 조회 4개 API를 제공합니다.
+다수 서버 환경에서도 안정적으로 동작하는 것을 목표로 한 커피숍 주문 시스템입니다. 메뉴 조회, 포인트 충전, 주문/결제, 인기 메뉴 조회 4개 API를 제공합니다. (테스트용 사용자 등록 API가 추가로 있습니다.)
 
 ## 🔗 Link
 
@@ -67,7 +67,8 @@ erDiagram
         BIGINT amount
         BIGINT balance_after "변동 직후 잔액 스냅샷"
         VARCHAR idempotency_key "충전 시에만 사용, UK(user_id, idempotency_key)"
-        DATETIME created_at
+        DATETIME created_at "INDEX(user_id, created_at)"
+        DATETIME updated_at
     }
     menu {
         BIGINT id PK
@@ -86,6 +87,7 @@ erDiagram
         VARCHAR order_id "주문번호 (ORD-yyyyMMddHHmmss-random)"
         VARCHAR idempotency_key "주문 재시도 중복 방지, UK(user_id, idempotency_key)"
         DATETIME created_at "INDEX(status, created_at, menu_id) — 인기 메뉴 집계용"
+        DATETIME updated_at
     }
 ```
 
@@ -250,9 +252,10 @@ erDiagram
 
 #### 2. 동시성
 
-* 실제로 두 가지를 동시 요청으로 재현해 검증했습니다.
-  * 잔액이 정확히 1건분일 때 같은 메뉴를 동시에 2번 주문 → 1건만 성공, 잔액 0(음수 아님)
-  * 같은 idempotencyKey로 포인트 충전 2건 동시 요청 → 1건만 성공(409), `point_history`엔 정확히 1건만 기록
+* 실제 MySQL(Testcontainers)에 동시 요청을 보내는 통합 테스트(`ConcurrencyIntegrationTest`)로 세 가지를 검증했습니다. (아래 "4. 테스트" 참고)
+  * 잔액이 정확히 1건분일 때 같은 메뉴를 서로 다른 멱등키로 동시에 10번 주문 → 1건만 성공, 잔액 0(음수 아님)
+  * 같은 idempotencyKey로 포인트 충전 10건 동시 요청 → 1건만 반영, `point_history`엔 정확히 1건만 기록
+  * 서로 다른 idempotencyKey로 포인트 충전 20건 동시 요청 → 모두 반영, 잔액 합계 정확(lost update 없음)
 * 주문에도 멱등키를 적용했고(단위 테스트로 검증), 락 대기는 3초로 제한했습니다.
 
 #### 3. 데이터 일관성
